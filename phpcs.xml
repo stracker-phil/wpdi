@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<ruleset name="WPDI WordPress Coding Standards">
+    <description>WordPress Coding Standards for WPDI</description>
+
+    <!-- Include WordPress Coding Standards -->
+    <rule ref="WordPress"/>
+
+    <!-- Check all PHP files -->
+    <file>src/</file>
+    <file>init.php</file>
+
+    <!-- Exclude vendor directory -->
+    <exclude-pattern>vendor/</exclude-pattern>
+    <exclude-pattern>cache/</exclude-pattern>
+
+    <!-- Allow PSR-4 autoloader file names -->
+    <rule ref="WordPress.Files.FileName">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Set minimum PHP version -->
+    <config name="minimum_supported_wp_version" value="5.0"/>
+    <config name="testVersion" value="7.4-"/>
+</ruleset>
