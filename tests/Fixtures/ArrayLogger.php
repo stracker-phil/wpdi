@@ -6,13 +6,13 @@ namespace WPDI\Tests\Fixtures;
  * Concrete implementation of LoggerInterface
  */
 class ArrayLogger implements LoggerInterface {
-    private array $logs = array();
+	private array $logs = array();
 
-    public function log(string $message): void {
-        $this->logs[] = $message;
-    }
+	public function log( string $message ): void {
+		$this->logs[] = $message;
+	}
 
-    public function get_logs(): array {
-        return $this->logs;
-    }
+	public function get_logs(): array {
+		return $this->logs;
+	}
 }
