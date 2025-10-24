@@ -9,6 +9,7 @@ use WPDI\Exceptions\Not_Found_Exception;
 use WPDI\Exceptions\Circular_Dependency_Exception;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
+use Exception;
 
 class ExceptionsTest extends TestCase {
 
@@ -19,7 +20,7 @@ class ExceptionsTest extends TestCase {
 	public function test_container_exception_is_instance_of_exception(): void {
 		$exception = new Container_Exception( 'Test message' );
 
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_container_exception_implements_psr11_interface(): void {
@@ -63,7 +64,7 @@ class ExceptionsTest extends TestCase {
 	}
 
 	public function test_container_exception_preserves_previous_exception(): void {
-		$previous  = new \Exception( 'Previous exception' );
+		$previous  = new Exception( 'Previous exception' );
 		$exception = new Container_Exception( 'Current exception', 0, $previous );
 
 		$this->assertSame( $previous, $exception->getPrevious() );
@@ -76,7 +77,7 @@ class ExceptionsTest extends TestCase {
 	public function test_not_found_exception_is_instance_of_exception(): void {
 		$exception = new Not_Found_Exception( 'Test message' );
 
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_not_found_exception_implements_psr11_interface(): void {
@@ -120,7 +121,7 @@ class ExceptionsTest extends TestCase {
 	}
 
 	public function test_not_found_exception_preserves_previous_exception(): void {
-		$previous  = new \Exception( 'Previous exception' );
+		$previous  = new Exception( 'Previous exception' );
 		$exception = new Not_Found_Exception( 'Current exception', 0, $previous );
 
 		$this->assertSame( $previous, $exception->getPrevious() );
@@ -216,14 +217,14 @@ class ExceptionsTest extends TestCase {
 	public function test_wpdi_exception_is_instance_of_exception(): void {
 		$exception = new WPDI_Exception( 'Test message' );
 
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_container_exception_extends_wpdi_exception(): void {
 		$exception = new Container_Exception( 'Test message' );
 
 		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_not_found_exception_extends_container_exception(): void {
@@ -231,7 +232,7 @@ class ExceptionsTest extends TestCase {
 
 		$this->assertInstanceOf( Container_Exception::class, $exception );
 		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_circular_dependency_exception_extends_container_exception(): void {
@@ -239,7 +240,7 @@ class ExceptionsTest extends TestCase {
 
 		$this->assertInstanceOf( Container_Exception::class, $exception );
 		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( \Exception::class, $exception );
+		$this->assertInstanceOf( Exception::class, $exception );
 	}
 
 	public function test_can_catch_all_wpdi_exceptions_with_base_class(): void {
