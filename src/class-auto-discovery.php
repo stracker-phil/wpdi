@@ -7,6 +7,7 @@ namespace WPDI;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use Exception;
 
 /**
  * Discovers classes for auto-registration
@@ -15,7 +16,7 @@ class Auto_Discovery {
 	/**
 	 * Discover concrete classes in directory
 	 */
-	public function discover( string $directory ) : array {
+	public function discover( string $directory ): array {
 		if ( ! is_dir( $directory ) ) {
 			return array();
 		}
@@ -38,7 +39,7 @@ class Auto_Discovery {
 	/**
 	 * Extract class names from PHP file
 	 */
-	private function extract_classes_from_file( string $file ) : array {
+	private function extract_classes_from_file( string $file ): array {
 		$content = file_get_contents( $file );
 		$tokens  = token_get_all( $content );
 
@@ -65,7 +66,7 @@ class Auto_Discovery {
 	/**
 	 * Extract namespace from tokens
 	 */
-	private function extract_namespace( array $tokens, int &$index ) : string {
+	private function extract_namespace( array $tokens, int &$index ): string {
 		$namespace = '';
 		$index ++; // Skip T_NAMESPACE
 
@@ -89,7 +90,7 @@ class Auto_Discovery {
 	/**
 	 * Extract class name from tokens
 	 */
-	private function extract_class_name( array $tokens, int &$index ) : string {
+	private function extract_class_name( array $tokens, int &$index ): string {
 		$index ++; // Skip T_CLASS
 
 		while ( $index < count( $tokens ) ) {
@@ -105,7 +106,7 @@ class Auto_Discovery {
 	/**
 	 * Filter to only concrete, instantiable classes
 	 */
-	private function filter_concrete_classes( array $classes ) : array {
+	private function filter_concrete_classes( array $classes ): array {
 		$concrete = array();
 
 		foreach ( $classes as $class ) {
@@ -118,7 +119,7 @@ class Auto_Discovery {
 				if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
 					$concrete[] = $class;
 				}
-			} catch ( \Exception $e ) {
+			} catch ( Exception $e ) {
 				// Skip classes that can't be reflected
 				continue;
 			}
