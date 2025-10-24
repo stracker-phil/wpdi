@@ -21,7 +21,7 @@ class Container implements ContainerInterface {
 	 * Bind a service to the container
 	 * Only accepts class names or interfaces - no magic strings
 	 */
-	public function bind( string $abstract, callable $factory = null, bool $singleton = true ): void {
+	public function bind( string $abstract, ?callable $factory = null, bool $singleton = true ): void {
 		// Validate that abstract is a class or interface name
 		if ( ! class_exists( $abstract ) && ! interface_exists( $abstract ) ) {
 			throw new Container_Exception( "'{$abstract}' must be a valid class or interface name" );
@@ -33,9 +33,7 @@ class Container implements ContainerInterface {
 			};
 		}
 
-		if ( ! is_callable( $factory ) ) {
-			throw new Container_Exception( "Factory must be callable for {$abstract}" );
-		}
+		// Note: is_callable() check omitted - the ?callable type hint ensures this at compile time
 
 		$this->bindings[ $abstract ] = array(
 			'factory'   => $factory,
@@ -90,10 +88,17 @@ class Container implements ContainerInterface {
 	}
 
 	/**
-	 * Load compiled service definitions
+	 * Load compiled class list from cache
+	 *
+	 * @param array $classes Array of discovered class names from cache
 	 */
-	public function load_compiled( array $compiled ): void {
-		$this->bindings = array_merge( $this->bindings, $compiled );
+	public function load_compiled( array $classes ): void {
+		// Bind each cached class (autowiring will recreate factories)
+		foreach ( $classes as $class ) {
+			if ( ! isset( $this->bindings[ $class ] ) ) {
+				$this->bind( $class );
+			}
+		}
 		$this->is_compiled = true;
 	}
 
@@ -122,10 +127,10 @@ class Container implements ContainerInterface {
 				}
 			}
 
-			// Generate cache file
+			// Generate cache file with discovered classes (not bindings)
 			if ( ! file_exists( $cache_file ) ) {
 				$compiler = new Compiler();
-				$compiler->compile( $this->bindings, $cache_file );
+				$compiler->compile( $services, $cache_file );
 			}
 		}
 	}
