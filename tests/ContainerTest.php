@@ -15,6 +15,8 @@ use WPDI\Tests\Fixtures\ArrayLogger;
 use WPDI\Tests\Fixtures\ClassWithInterface;
 use WPDI\Tests\Fixtures\AbstractClass;
 use WPDI\Tests\Fixtures\ClassWithDefaultValue;
+use WPDI\Tests\Fixtures\CircularA;
+use WPDI\Tests\Fixtures\CircularB;
 
 class ContainerTest extends TestCase {
 
@@ -290,10 +292,11 @@ class ContainerTest extends TestCase {
     // ========================================
 
     public function test_circular_dependency_handling(): void {
-        // This test documents current behavior
-        // Circular dependencies will cause infinite recursion
-        // This is expected and should be caught by developers
-        $this->markTestSkipped('Circular dependency detection not implemented');
+        $this->expectException(Container_Exception::class);
+        $this->expectExceptionMessage('Circular dependency detected');
+
+        // CircularA depends on CircularB, which depends back on CircularA
+        $this->container->get(CircularA::class);
     }
 
     public function test_can_override_binding(): void {
