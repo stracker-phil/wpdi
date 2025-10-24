@@ -14,7 +14,9 @@ if (!defined('ABSPATH')) {
 // Mock WordPress functions that WPDI might use
 if (!function_exists('wp_get_environment_type')) {
     function wp_get_environment_type(): string {
-        return 'development';
+        // Allow tests to override via environment variable
+        $env_type = getenv('WP_ENVIRONMENT_TYPE');
+        return $env_type !== false ? $env_type : 'development';
     }
 }
 
