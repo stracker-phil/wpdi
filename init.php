@@ -4,8 +4,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/src/exceptions/class-wpdi-exception.php';
 require_once __DIR__ . '/src/exceptions/class-container-exception.php';
 require_once __DIR__ . '/src/exceptions/class-not-found-exception.php';
+require_once __DIR__ . '/src/exceptions/class-circular-dependency-exception.php';
 require_once __DIR__ . '/src/class-auto-discovery.php';
 require_once __DIR__ . '/src/class-compiler.php';
 require_once __DIR__ . '/src/class-container.php';
