@@ -13,9 +13,9 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 	return;
 }
 
-WP_CLI::add_command( 'wpdi compile', __NAMESPACE__ . '\\Compile_Command' );
-WP_CLI::add_command( 'wpdi discover', __NAMESPACE__ . '\\Compile_Command::discover' );
-WP_CLI::add_command( 'wpdi clear', __NAMESPACE__ . '\\Compile_Command::clear' );
+WP_CLI::add_command( 'di compile', __NAMESPACE__ . '\\Compile_Command' );
+WP_CLI::add_command( 'di discover', __NAMESPACE__ . '\\Compile_Command::discover' );
+WP_CLI::add_command( 'di clear', __NAMESPACE__ . '\\Compile_Command::clear' );
 
 class Compile_Command {
 	/**
@@ -31,8 +31,8 @@ class Compile_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp wpdi compile
-	 *     wp wpdi compile --path=/path/to/module --force
+	 *     wp di compile
+	 *     wp di compile --path=/path/to/module --force
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$path  = $assoc_args['path'] ?? getcwd();
