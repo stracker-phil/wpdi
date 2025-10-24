@@ -8,6 +8,7 @@ namespace WPDI;
 use Psr\Container\ContainerInterface;
 use WPDI\Exceptions\Container_Exception;
 use WPDI\Exceptions\Not_Found_Exception;
+use WPDI\Exceptions\Circular_Dependency_Exception;
 use ReflectionClass;
 use ReflectionParameter;
 use ReflectionNamedType;
@@ -15,6 +16,7 @@ use ReflectionNamedType;
 class Container implements ContainerInterface {
 	private array $bindings = array();
 	private array $instances = array();
+	private array $resolving = array();
 	private bool $is_compiled = false;
 
 	/**
@@ -157,25 +159,41 @@ class Container implements ContainerInterface {
 	 * Autowire a class using reflection
 	 */
 	private function autowire( string $class_name ): object {
-		$reflection = new ReflectionClass( $class_name );
-
-		if ( ! $reflection->isInstantiable() ) {
-			throw new Container_Exception( "Class {$class_name} is not instantiable" );
+		// Check for circular dependency
+		if ( isset( $this->resolving[ $class_name ] ) ) {
+			$chain = implode( ' -> ', array_keys( $this->resolving ) );
+			throw new Circular_Dependency_Exception(
+				"Circular dependency detected: {$chain} -> {$class_name}"
+			);
 		}
 
-		$constructor = $reflection->getConstructor();
+		// Mark as currently resolving
+		$this->resolving[ $class_name ] = true;
 
-		if ( ! $constructor ) {
-			$instance = new $class_name();
-		} else {
-			$dependencies = $this->resolve_dependencies( $constructor->getParameters() );
-			$instance = new $class_name( ...$dependencies );
+		try {
+			$reflection = new ReflectionClass( $class_name );
+
+			if ( ! $reflection->isInstantiable() ) {
+				throw new Container_Exception( "Class {$class_name} is not instantiable" );
+			}
+
+			$constructor = $reflection->getConstructor();
+
+			if ( ! $constructor ) {
+				$instance = new $class_name();
+			} else {
+				$dependencies = $this->resolve_dependencies( $constructor->getParameters() );
+				$instance = new $class_name( ...$dependencies );
+			}
+
+			// Cache as singleton by default
+			$this->instances[ $class_name ] = $instance;
+
+			return $instance;
+		} finally {
+			// Always remove from resolution stack
+			unset( $this->resolving[ $class_name ] );
 		}
-
-		// Cache as singleton by default
-		$this->instances[ $class_name ] = $instance;
-
-		return $instance;
 	}
 
 	/**
@@ -235,5 +253,6 @@ class Container implements ContainerInterface {
 	public function clear(): void {
 		$this->bindings = array();
 		$this->instances = array();
+		$this->resolving = array();
 	}
 }
