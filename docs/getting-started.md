@@ -39,8 +39,9 @@ require_once __DIR__ . '/wpdi/init.php';
 
 class My_Sample_Plugin extends WPDI\Scope {
     protected function bootstrap(): void {
-        // This is the composition root - only place with container access
-        $app = $this->get( 'Sample_Application' );
+        // This is the composition root & main entry point.
+        // Access to the DI services is only allowed in this function.
+        $app = $this->get( Sample_Application::class );
         $app->run();
     }
 }
