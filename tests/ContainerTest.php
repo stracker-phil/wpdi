@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use WPDI\Container;
 use WPDI\Exceptions\Container_Exception;
 use WPDI\Exceptions\Not_Found_Exception;
+use WPDI\Exceptions\Circular_Dependency_Exception;
 use WPDI\Tests\Fixtures\SimpleClass;
 use WPDI\Tests\Fixtures\ClassWithDependency;
 use WPDI\Tests\Fixtures\ClassWithMultipleDependencies;
@@ -292,7 +293,7 @@ class ContainerTest extends TestCase {
     // ========================================
 
     public function test_circular_dependency_handling(): void {
-        $this->expectException(Container_Exception::class);
+        $this->expectException(Circular_Dependency_Exception::class);
         $this->expectExceptionMessage('Circular dependency detected');
 
         // CircularA depends on CircularB, which depends back on CircularA

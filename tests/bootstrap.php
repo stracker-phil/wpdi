@@ -44,8 +44,10 @@ if (!function_exists('current_time')) {
 }
 
 // Load WPDI core files (since init.php has WordPress checks)
+require_once dirname(__DIR__) . '/src/exceptions/class-wpdi-exception.php';
 require_once dirname(__DIR__) . '/src/exceptions/class-container-exception.php';
 require_once dirname(__DIR__) . '/src/exceptions/class-not-found-exception.php';
+require_once dirname(__DIR__) . '/src/exceptions/class-circular-dependency-exception.php';
 require_once dirname(__DIR__) . '/src/class-auto-discovery.php';
 require_once dirname(__DIR__) . '/src/class-compiler.php';
 require_once dirname(__DIR__) . '/src/class-container.php';
