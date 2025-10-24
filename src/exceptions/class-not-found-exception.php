@@ -12,4 +12,4 @@ namespace WPDI\Exceptions;
 
 use Psr\Container\NotFoundExceptionInterface;
 
-class Not_Found_Exception extends Container_Exception implements NotFoundExceptionInterface {}
+class Not_Found_Exception extends Container_Exception implements NotFoundExceptionInterface { }

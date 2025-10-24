@@ -4,6 +4,8 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
+use ReflectionClass;
+
 /**
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
  */
@@ -28,15 +30,15 @@ abstract class Scope {
 	/**
 	 * Check if service exists
 	 */
-	protected function has( string $class ) : bool {
+	protected function has( string $class ): bool {
 		return $this->container->has( $class );
 	}
 
 	/**
 	 * Get base path for auto-discovery (plugin, theme, or module directory)
 	 */
-	protected function get_base_path() : string {
-		$reflection = new \ReflectionClass( $this );
+	protected function get_base_path(): string {
+		$reflection = new ReflectionClass( $this );
 
 		return dirname( $reflection->getFileName() );
 	}
@@ -44,5 +46,5 @@ abstract class Scope {
 	/**
 	 * Composition root - only place where service location happens
 	 */
-	abstract protected function bootstrap() : void;
+	abstract protected function bootstrap(): void;
 }

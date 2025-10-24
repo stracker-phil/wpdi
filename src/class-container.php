@@ -30,7 +30,7 @@ class Container implements ContainerInterface {
 		}
 
 		if ( null === $factory ) {
-			$factory = function() use ( $abstract ) {
+			$factory = function () use ( $abstract ) {
 				return $this->autowire( $abstract );
 			};
 		}
@@ -110,7 +110,7 @@ class Container implements ContainerInterface {
 	 * Initialize container with auto-discovery
 	 */
 	public function initialize( string $base_path ): void {
-		$cache_file = $base_path . '/cache/wpdi-container.php';
+		$cache_file  = $base_path . '/cache/wpdi-container.php';
 		$config_file = $base_path . '/wpdi-config.php';
 
 		// Load user configuration first
@@ -123,7 +123,7 @@ class Container implements ContainerInterface {
 			$this->load_compiled( require $cache_file );
 		} else {
 			$discovery = new Auto_Discovery();
-			$services = $discovery->discover( $base_path . '/src' );
+			$services  = $discovery->discover( $base_path . '/src' );
 
 			foreach ( $services as $class ) {
 				if ( ! isset( $this->bindings[ $class ] ) ) {
@@ -145,7 +145,7 @@ class Container implements ContainerInterface {
 	 * @return mixed Service instance
 	 */
 	private function resolve_binding( string $abstract ) {
-		$binding = $this->bindings[ $abstract ];
+		$binding  = $this->bindings[ $abstract ];
 		$instance = $binding['factory']();
 
 		if ( $binding['singleton'] ) {
@@ -183,7 +183,7 @@ class Container implements ContainerInterface {
 				$instance = new $class_name();
 			} else {
 				$dependencies = $this->resolve_dependencies( $constructor->getParameters() );
-				$instance = new $class_name( ...$dependencies );
+				$instance     = new $class_name( ...$dependencies );
 			}
 
 			// Cache as singleton by default
@@ -251,7 +251,7 @@ class Container implements ContainerInterface {
 	 * Clear all bindings and instances (for testing)
 	 */
 	public function clear(): void {
-		$this->bindings = array();
+		$this->bindings  = array();
 		$this->instances = array();
 		$this->resolving = array();
 	}

@@ -8,6 +8,8 @@ namespace WPDI\Commands;
 use WP_CLI;
 use WPDI\Auto_Discovery;
 use WPDI\Compiler;
+use Exception;
+use ReflectionClass;
 
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 	return;
@@ -168,12 +170,12 @@ class Compile_Command {
 	/**
 	 * Get human-readable class type
 	 */
-	private function get_class_type( string $class ) : string {
+	private function get_class_type( string $class ): string {
 		if ( ! class_exists( $class ) ) {
 			return 'unknown';
 		}
 
-		$reflection = new \ReflectionClass( $class );
+		$reflection = new ReflectionClass( $class );
 
 		if ( $reflection->isInterface() ) {
 			return 'interface';
@@ -189,16 +191,16 @@ class Compile_Command {
 	/**
 	 * Check if class is autowirable
 	 */
-	private function is_autowirable( string $class ) : bool {
+	private function is_autowirable( string $class ): bool {
 		if ( ! class_exists( $class ) ) {
 			return false;
 		}
 
 		try {
-			$reflection = new \ReflectionClass( $class );
+			$reflection = new ReflectionClass( $class );
 
 			return $reflection->isInstantiable() && ! $reflection->isAbstract();
-		} catch ( \Exception $e ) {
+		} catch ( Exception $e ) {
 			return false;
 		}
 	}
