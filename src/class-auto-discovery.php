@@ -71,7 +71,10 @@ class Auto_Discovery {
 
 		while ( $index < count( $tokens ) ) {
 			if ( is_array( $tokens[ $index ] ) ) {
-				if ( T_STRING === $tokens[ $index ][0] || T_NS_SEPARATOR === $tokens[ $index ][0] ) {
+				// PHP 8.0+ uses T_NAME_QUALIFIED for namespaces like "Foo\Bar"
+				$token_type = $tokens[ $index ][0];
+				if ( T_STRING === $token_type || T_NS_SEPARATOR === $token_type ||
+					( defined( 'T_NAME_QUALIFIED' ) && T_NAME_QUALIFIED === $token_type ) ) {
 					$namespace .= $tokens[ $index ][1];
 				}
 			} elseif ( ';' === $tokens[ $index ] ) {
