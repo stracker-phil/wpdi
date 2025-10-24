@@ -1,54 +1,36 @@
 <?php
 /**
- * Compiles service definitions for production performance
+ * Compiles discovered service classes for production performance
  */
 
 namespace WPDI;
 
 class Compiler {
 	/**
-	 * Compile service definitions to cache file
+	 * Compile discovered class names to cache file
+	 *
+	 * NOTE: We only cache the list of discovered classes, not the factory closures.
+	 * Autowired factories can be recreated instantly via reflection.
+	 * User-defined factories (from wpdi-config.php) are never cached.
+	 *
+	 * @param array  $classes    Array of discovered class names
+	 * @param string $cache_file Path to cache file
+	 * @return bool True on success, false on failure
 	 */
-	public function compile( array $bindings, string $cache_file ) : bool {
+	public function compile( array $classes, string $cache_file ) : bool {
 		$cache_dir = dirname( $cache_file );
 
 		if ( ! is_dir( $cache_dir ) ) {
 			wp_mkdir_p( $cache_dir );
 		}
 
-		$compiled = $this->generate_compiled_array( $bindings );
 		$content  = "<?php\n\n";
 		$content  .= "// Auto-generated WPDI cache - do not edit\n";
-		$content  .= "// Generated: " . current_time( 'Y-m-d H:i:s' ) . "\n\n";
-		$content  .= "return " . var_export( $compiled, true ) . ";\n";
+		$content  .= "// Generated: " . current_time( 'Y-m-d H:i:s' ) . "\n";
+		$content  .= "// Contains: " . count( $classes ) . " discovered classes\n\n";
+		$content  .= "return " . var_export( $classes, true ) . ";\n";
 
 		return false !== file_put_contents( $cache_file, $content );
-	}
-
-	/**
-	 * Generate compiled array from bindings
-	 */
-	private function generate_compiled_array( array $bindings ) : array {
-		$compiled = array();
-
-		foreach ( $bindings as $abstract => $binding ) {
-			$compiled[ $abstract ] = array(
-				'factory'   => $this->serialize_factory( $binding['factory'] ),
-				'singleton' => $binding['singleton'],
-			);
-		}
-
-		return $compiled;
-	}
-
-	/**
-	 * Serialize factory for caching (simplified version)
-	 *
-	 * For now, return the original factory.
-	 * In a more sophisticated implementation, we could serialize simple factories.
-	 */
-	private function serialize_factory( callable $factory ) : callable {
-		return $factory;
 	}
 
 	/**
