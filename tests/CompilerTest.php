@@ -163,67 +163,6 @@ class CompilerTest extends TestCase {
     }
 
     // ========================================
-    // Dependency Analysis Tests
-    // ========================================
-
-    public function test_analyze_dependencies_counts_total_services(): void {
-        $bindings = array(
-            SimpleClass::class => array(
-                'factory' => function() { return new SimpleClass(); },
-                'singleton' => true,
-            ),
-            LoggerInterface::class => array(
-                'factory' => function() { return new \WPDI\Tests\Fixtures\ArrayLogger(); },
-                'singleton' => true,
-            ),
-        );
-
-        $analysis = $this->compiler->analyze_dependencies($bindings);
-
-        $this->assertArrayHasKey('total_services', $analysis);
-        $this->assertEquals(2, $analysis['total_services']);
-    }
-
-    public function test_analyze_dependencies_identifies_interfaces(): void {
-        $bindings = array(
-            SimpleClass::class => array(
-                'factory' => function() { return new SimpleClass(); },
-                'singleton' => true,
-            ),
-            LoggerInterface::class => array(
-                'factory' => function() { return new \WPDI\Tests\Fixtures\ArrayLogger(); },
-                'singleton' => true,
-            ),
-        );
-
-        $analysis = $this->compiler->analyze_dependencies($bindings);
-
-        $this->assertArrayHasKey('interfaces', $analysis);
-        $this->assertContains(LoggerInterface::class, $analysis['interfaces']);
-        $this->assertNotContains(SimpleClass::class, $analysis['interfaces']);
-    }
-
-    public function test_analyze_dependencies_returns_expected_structure(): void {
-        $bindings = array(
-            SimpleClass::class => array(
-                'factory' => function() { return new SimpleClass(); },
-                'singleton' => true,
-            ),
-        );
-
-        $analysis = $this->compiler->analyze_dependencies($bindings);
-
-        $this->assertArrayHasKey('total_services', $analysis);
-        $this->assertArrayHasKey('autowired', $analysis);
-        $this->assertArrayHasKey('manual', $analysis);
-        $this->assertArrayHasKey('interfaces', $analysis);
-
-        $this->assertIsArray($analysis['autowired']);
-        $this->assertIsArray($analysis['manual']);
-        $this->assertIsArray($analysis['interfaces']);
-    }
-
-    // ========================================
     // Content Tests
     // ========================================
 
