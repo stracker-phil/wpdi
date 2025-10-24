@@ -363,17 +363,13 @@ require $_tests_dir . '/includes/bootstrap.php';
 
 ```bash
 # Run all tests
-vendor/bin/phpunit
-
-# Run only unit tests
-vendor/bin/phpunit --testsuite=unit
-
-# Run specific test
-vendor/bin/phpunit tests/unit/test-payment-processor.php
+ddev composer test
 
 # Run with coverage
-vendor/bin/phpunit --coverage-html coverage/
+ddev composer coverage
 ```
+
+The test coverage report is available at: https://wpdi.ddev.site/coverage/
 
 ## Next Steps
 
