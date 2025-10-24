@@ -66,43 +66,29 @@ class Compile_Command {
 			WP_CLI::log( "  - {$class}" );
 		}
 
-		// Create bindings for auto-discovered classes
-		$bindings = array();
-		foreach ( $classes as $class ) {
-			$bindings[ $class ] = array(
-				'factory'   => function () use ( $class ) {
-					// This would be the autowiring logic
-					return "autowire:{$class}";
-				},
-				'singleton' => true,
-			);
-		}
-
-		// Load manual configuration if exists
-		$config_file = $path . '/wpdi-config.php';
+		// Check for manual configuration
+		$config_file    = $path . '/wpdi-config.php';
+		$manual_configs = array();
 		if ( file_exists( $config_file ) ) {
 			WP_CLI::log( 'Loading configuration from wpdi-config.php...' );
-			$config = require $config_file;
-			foreach ( $config as $abstract => $factory ) {
-				$bindings[ $abstract ] = array(
-					'factory'   => $factory,
-					'singleton' => true,
-				);
-			}
+			$config         = require $config_file;
+			$manual_configs = array_keys( $config );
 		}
 
 		WP_CLI::log( 'Compiling container cache...' );
 
 		$compiler = new Compiler();
-		if ( $compiler->compile( $bindings, $cache_file ) ) {
+		if ( $compiler->compile( $classes, $cache_file ) ) {
 			WP_CLI::success( "Container compiled successfully to {$cache_file}" );
 
-			// Show analysis
-			$analysis = $compiler->analyze_dependencies( $bindings );
-			WP_CLI::log( "Total services: {$analysis['total_services']}" );
-			WP_CLI::log( 'Autowired: ' . count( $analysis['autowired'] ) );
-			WP_CLI::log( 'Manual: ' . count( $analysis['manual'] ) );
-			WP_CLI::log( 'Interfaces: ' . count( $analysis['interfaces'] ) );
+			// Show statistics
+			WP_CLI::log( 'Total discovered classes: ' . count( $classes ) );
+			if ( ! empty( $manual_configs ) ) {
+				WP_CLI::log( 'Manual configurations: ' . count( $manual_configs ) );
+				foreach ( $manual_configs as $config_class ) {
+					WP_CLI::log( "  - {$config_class}" );
+				}
+			}
 		} else {
 			WP_CLI::error( 'Failed to compile container cache' );
 		}
