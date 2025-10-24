@@ -56,6 +56,7 @@ ddev composer update
 - Autowiring via PHP reflection
 - Singleton caching by default
 - Config loading from `wpdi-config.php`
+- Circular dependency detection with helpful error messages
 
 **2. Scope (`src/class-scope.php`)**
 - Base class for WordPress modules (plugins/themes)
@@ -73,6 +74,18 @@ ddev composer update
 - Creates `cache/wpdi-container.php` with simple array export
 - Production optimization: skips auto-discovery on cached systems
 
+**5. Exception Hierarchy (`src/exceptions/`)**
+```
+WPDI_Exception (base for all library exceptions)
+└── Container_Exception (PSR-11 ContainerExceptionInterface)
+    ├── Not_Found_Exception (PSR-11 NotFoundExceptionInterface)
+    └── Circular_Dependency_Exception (circular dependency detection)
+```
+- `WPDI_Exception`: Base exception - catch this to handle any WPDI error
+- `Container_Exception`: PSR-11 compliant container errors
+- `Not_Found_Exception`: Thrown when service not found
+- `Circular_Dependency_Exception`: Thrown when circular dependencies detected
+
 ### Key Design Decisions
 
 **Autowiring Strategy:**
@@ -80,6 +93,17 @@ ddev composer update
 - User-defined factories in `wpdi-config.php` override autowiring
 - Singletons cached in `$instances` array
 - Non-singletons created fresh each time
+
+**Circular Dependency Detection:**
+The Container detects circular constructor dependencies and throws a `Circular_Dependency_Exception` with a clear message:
+```php
+// Example: ServiceA depends on ServiceB, which depends on ServiceA
+Circular_Dependency_Exception: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
+```
+- Implementation: Tracks resolving classes in `$resolving` array during autowiring
+- Uses try-finally to ensure cleanup even when exceptions occur
+- Circular dependencies indicate design flaws - refactor to extract shared logic or use events
+- Can be caught specifically, or via `Container_Exception`, `WPDI_Exception`, or PSR-11 `ContainerExceptionInterface`
 
 **Cache Design:**
 ```php
@@ -94,6 +118,31 @@ This avoids Closure serialization (impossible with `var_export()`). On cache loa
 
 **Composition Root:**
 The `Scope::bootstrap()` method is the **only** place that accesses the container. Services receive dependencies via constructor injection, never via container access.
+
+**Exception Handling:**
+Users can catch exceptions at multiple levels depending on their needs:
+```php
+// Catch specific exception type
+try {
+    $service = $container->get(MyService::class);
+} catch (Circular_Dependency_Exception $e) {
+    // Handle circular dependency specifically
+}
+
+// Catch all container exceptions (PSR-11 compliant)
+try {
+    $service = $container->get(MyService::class);
+} catch (ContainerExceptionInterface $e) {
+    // Handle any container error
+}
+
+// Catch all WPDI exceptions
+try {
+    $service = $container->get(MyService::class);
+} catch (WPDI_Exception $e) {
+    // Handle any WPDI library error
+}
+```
 
 ### WordPress Integration
 
@@ -112,18 +161,16 @@ Tests mock WordPress functions like `wp_get_environment_type()`, `wp_mkdir_p()`,
 ## Testing Philosophy
 
 **Test Structure:**
-- `tests/Fixtures/` - Sample classes for testing dependency injection
-- `tests/ContainerTest.php` - Core DI functionality (27 tests)
+- `tests/Fixtures/` - Sample classes for testing dependency injection (includes CircularA/CircularB for circular dependency testing)
+- `tests/ContainerTest.php` - Core DI functionality (27 tests including circular dependency detection)
 - `tests/ScopeTest.php` - Module initialization (10 tests)
 - `tests/AutoDiscoveryTest.php` - Class scanning (12 tests)
 - `tests/CompilerTest.php` - Cache generation (14 tests)
-- `tests/ExceptionsTest.php` - PSR-11 compliance (20 tests)
+- `tests/ExceptionsTest.php` - PSR-11 compliance and exception hierarchy (28 tests)
+- **Total: 90 tests, 219 assertions**
 
 **Fixture Loading:**
 Test fixtures are manually `require_once`'d in `setUp()` since Auto_Discovery expects loaded classes when checking with `class_exists()`.
-
-**Legitimate Skipped Tests:**
-- `test_circular_dependency_handling` - Feature not implemented (future enhancement)
 
 ## Common Pitfalls
 
@@ -172,6 +219,32 @@ PHP's type system validates callable before function execution. Such checks crea
 **6. Test Bootstrap WordPress Functions**
 Always mock WordPress functions in `tests/bootstrap.php`. The bootstrap must be runnable without WordPress core. Suppress expected warnings in tests with `@` operator when testing failure scenarios (e.g., write permissions).
 
+**7. Circular Dependencies Are Design Flaws**
+The Container detects and rejects circular constructor dependencies with helpful error messages. If you encounter a circular dependency exception:
+- **Refactor to extract shared logic** into a third service both classes can depend on
+- **Use WordPress hooks** for event-driven communication instead of direct dependencies
+- **Redesign class responsibilities** - tight circular coupling indicates poor separation of concerns
+
+Example refactoring:
+```php
+// ❌ BAD - Circular dependency
+class ServiceA {
+    public function __construct(ServiceB $b) {}
+}
+class ServiceB {
+    public function __construct(ServiceA $a) {}
+}
+
+// ✅ GOOD - Extract shared logic
+class SharedLogic {}
+class ServiceA {
+    public function __construct(SharedLogic $shared) {}
+}
+class ServiceB {
+    public function __construct(SharedLogic $shared) {}
+}
+```
+
 ## Code Modification Guidelines
 
 **When modifying any source file:**
@@ -185,6 +258,8 @@ Always mock WordPress functions in `tests/bootstrap.php`. The bootstrap must be 
 - Ensure PSR-11 compliance maintained
 - Test both autowiring and explicit binding paths
 - Avoid defensive checks that type hints make impossible
+- Maintain `$resolving` array cleanup in try-finally blocks for circular dependency detection
+- Ensure `clear()` method resets all state including `$resolving`
 
 **When modifying Auto_Discovery:**
 - Test with nested directories in `tests/Fixtures/`
@@ -199,7 +274,10 @@ Always mock WordPress functions in `tests/bootstrap.php`. The bootstrap must be 
 - Ensure `var_export()` output is valid PHP 7.4+ syntax
 
 **When adding new exceptions:**
-- Extend appropriate PSR-11 interface
-- Add tests to `ExceptionsTest.php`
-- Verify exception hierarchy (NotFound extends Container)
-- Document common causes in exception docblock
+- Extend from appropriate base class in the hierarchy:
+  - Container-related: extend `Container_Exception`
+  - Library-specific: extend `WPDI_Exception`
+- Add tests to `ExceptionsTest.php` verifying the exception hierarchy
+- Update `tests/bootstrap.php` and `init.php` to load new exception file
+- Document common causes and solutions in exception docblock
+- Test exception can be caught at multiple levels (specific type, base class, interface)
