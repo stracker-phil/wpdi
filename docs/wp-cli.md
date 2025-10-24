@@ -4,22 +4,22 @@ WPDI includes helpful WP-CLI commands for development and deployment workflows.
 
 ## Available Commands
 
-### wp wpdi discover
+### `wp di discover`
 
 Discover and analyze classes in your module without compiling.
 
 ```bash
 # Discover classes in current directory
-wp wpdi discover
+wp di discover
 
 # Discover in specific directory
-wp wpdi discover --path=/path/to/plugin
+wp di discover --path=/path/to/plugin
 
 # Output as table (default)
-wp wpdi discover --format=table
+wp di discover --format=table
 
 # Output as JSON
-wp wpdi discover --format=json
+wp di discover --format=json
 ```
 
 **Example Output:**
@@ -35,19 +35,19 @@ wp wpdi discover --format=json
 +----------------------------------+-----------+-------------+
 ```
 
-### wp wpdi compile
+### `wp di compile`
 
 Compile your container for production performance.
 
 ```bash
 # Compile current directory
-wp wpdi compile
+wp di compile
 
 # Compile specific directory
-wp wpdi compile --path=/path/to/plugin
+wp di compile --path=/path/to/plugin
 
 # Force recompilation
-wp wpdi compile --force
+wp di compile --force
 ```
 
 **Example Output:**
@@ -71,16 +71,16 @@ Manual: 2
 Interfaces: 1
 ```
 
-### wp wpdi clear
+### `wp di clear`
 
 Clear compiled cache files.
 
 ```bash
 # Clear cache in current directory
-wp wpdi clear
+wp di clear
 
 # Clear cache in specific directory
-wp wpdi clear --path=/path/to/plugin
+wp di clear --path=/path/to/plugin
 ```
 
 ## Development Workflow
@@ -89,17 +89,17 @@ wp wpdi clear --path=/path/to/plugin
 
 ```bash
 # Discover what classes WPDI finds
-wp wpdi discover
+wp di discover
 
 # Check for any issues
-wp wpdi discover --format=json | jq '.[] | select(.autowirable == "no")'
+wp di discover --format=json | jq '.[] | select(.autowirable == "no")'
 ```
 
 ### 2. Pre-Deployment
 
 ```bash
 # Compile for production
-wp wpdi compile --force
+wp di compile --force
 
 # Verify compilation worked
 ls -la cache/wpdi-container.php
@@ -109,11 +109,11 @@ ls -la cache/wpdi-container.php
 
 ```bash
 # Clear cache and rediscover
-wp wpdi clear
-wp wpdi discover
+wp di clear
+wp di discover
 
 # Check what's actually being compiled
-wp wpdi compile --force --verbose
+wp di compile --force --verbose
 ```
 
 ## Integration with Deployment
@@ -122,7 +122,7 @@ wp wpdi compile --force --verbose
 
 ```bash
 # Before creating your plugin zip
-wp wpdi compile --force
+wp di compile --force
 zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 ```
 
@@ -131,10 +131,10 @@ zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 ```bash
 #!/bin/bash
 echo "Compiling WPDI container..."
-wp wpdi compile --force
+wp di compile --force
 
 echo "Running tests..."
-vendor/bin/phpunit
+ddev composer test
 
 echo "Creating deployment package..."
 # ... rest of deployment script
@@ -145,7 +145,7 @@ echo "Creating deployment package..."
 ```yaml
 - name: Compile WPDI Container
   run: |
-    wp wpdi compile --force
+    wp di compile --force
 
 - name: Verify Compilation
   run: |

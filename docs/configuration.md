@@ -6,6 +6,8 @@ WPDI works with zero configuration for concrete classes, but you'll need to conf
 
 Create a `wpdi-config.php` file in your plugin/theme root directory:
 
+**Traditional syntax** (verbose)
+
 ```php
 <?php
 /**
@@ -17,17 +19,40 @@ Create a `wpdi-config.php` file in your plugin/theme root directory:
 
 return array(
     // Interface bindings
-    'Logger_Interface' => function() {
+    'Logger_Interface' => static function() {
         return new WP_Logger();
     },
     
     // WordPress option-based configuration
-    'Sample_Config' => function() {
+    'Sample_Config' => static function() {
         return new Sample_Config(
             get_option( 'sample_plugin_enabled', true ),
             get_option( 'sample_plugin_version', '1.0.0' )
         );
     },
+);
+```
+
+**Modern arrow-function syntax** (supported in php 7.4)
+
+```php
+<?php
+/**
+ * WPDI Configuration
+ *
+ * This file defines interface bindings and WordPress-specific factories.
+ * Concrete classes are auto-discovered and don't need configuration.
+ */
+
+return array(
+    // Interface bindings
+    'Logger_Interface' => static fn() => new WP_Logger(),
+    
+    // WordPress option-based configuration
+    'Sample_Config' => static fn() => new Sample_Config(
+        get_option( 'sample_plugin_enabled', true ),
+        get_option( 'sample_plugin_version', '1.0.0' )
+    ),
 );
 ```
 
