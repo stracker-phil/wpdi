@@ -18,8 +18,10 @@ abstract class Scope {
 
 	/**
 	 * Get service from container (only available in this class)
+	 *
+	 * @return mixed Service instance
 	 */
-	protected function get( string $class ) : mixed {
+	protected function get( string $class ) {
 		return $this->container->get( $class );
 	}
 

@@ -44,8 +44,10 @@ class Container implements ContainerInterface {
 	/**
 	 * Get service from container (PSR-11)
 	 * Only accepts class names - no magic strings
+	 *
+	 * @return mixed Service instance
 	 */
-	public function get( string $id ): mixed {
+	public function get( string $id ) {
 		// Validate that id is a class name
 		if ( ! class_exists( $id ) && ! interface_exists( $id ) ) {
 			throw new Not_Found_Exception( "'{$id}' must be a valid class or interface name" );
@@ -137,8 +139,10 @@ class Container implements ContainerInterface {
 
 	/**
 	 * Resolve a binding
+	 *
+	 * @return mixed Service instance
 	 */
-	private function resolve_binding( string $abstract ): mixed {
+	private function resolve_binding( string $abstract ) {
 		$binding = $this->bindings[ $abstract ];
 		$instance = $binding['factory']();
 
@@ -189,8 +193,10 @@ class Container implements ContainerInterface {
 
 	/**
 	 * Resolve a single parameter
+	 *
+	 * @return mixed Resolved parameter value
 	 */
-	private function resolve_parameter( ReflectionParameter $parameter ): mixed {
+	private function resolve_parameter( ReflectionParameter $parameter ) {
 		$type = $parameter->getType();
 
 		if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
@@ -209,8 +215,9 @@ class Container implements ContainerInterface {
 			return null;
 		}
 
+		$type_name = $type ? $type->getName() : 'unknown';
 		throw new Container_Exception(
-			"Cannot resolve parameter '{$parameter->getName()}' of type '{$type?->getName()}' " .
+			"Cannot resolve parameter '{$parameter->getName()}' of type '{$type_name}' " .
 			"in class '{$parameter->getDeclaringClass()->getName()}'"
 		);
 	}
