@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-CLI command for compiling WPDI containers (WordPress Coding Standards)
+ * WP-CLI command for compiling WPDI container cache
  */
 
 namespace WPDI\Commands;
@@ -8,20 +8,13 @@ namespace WPDI\Commands;
 use WP_CLI;
 use WPDI\Auto_Discovery;
 use WPDI\Compiler;
-use Exception;
-use ReflectionClass;
 
-if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
-	return;
-}
-
-WP_CLI::add_command( 'di compile', __NAMESPACE__ . '\\Compile_Command' );
-WP_CLI::add_command( 'di discover', __NAMESPACE__ . '\\Compile_Command::discover' );
-WP_CLI::add_command( 'di clear', __NAMESPACE__ . '\\Compile_Command::clear' );
-
+/**
+ * Compile WPDI container for production performance
+ */
 class Compile_Command {
 	/**
-	 * Compile WPDI container for production performance
+	 * Compile WPDI container cache
 	 *
 	 * ## OPTIONS
 	 *
@@ -93,115 +86,6 @@ class Compile_Command {
 			}
 		} else {
 			WP_CLI::error( 'Failed to compile container cache' );
-		}
-	}
-
-	/**
-	 * Discover classes without compiling
-	 *
-	 * ## OPTIONS
-	 *
-	 * [--path=<path>]
-	 * : Path to module directory (default: current directory)
-	 *
-	 * [--format=<format>]
-	 * : Output format (table, json, yaml, csv) (default: table)
-	 */
-	public function discover( $args, $assoc_args ) {
-		$path   = $assoc_args['path'] ?? getcwd();
-		$format = $assoc_args['format'] ?? 'table';
-
-		if ( ! is_dir( $path ) ) {
-			WP_CLI::error( "Directory does not exist: {$path}" );
-		}
-
-		$discovery = new Auto_Discovery();
-		$classes   = $discovery->discover( $path . '/src' );
-
-		if ( empty( $classes ) ) {
-			WP_CLI::log( "No classes found in {$path}/src" );
-
-			return;
-		}
-
-		$output = array();
-		foreach ( $classes as $class ) {
-			$output[] = array(
-				'class'       => $class,
-				'type'        => $this->get_class_type( $class ),
-				'autowirable' => $this->is_autowirable( $class ) ? 'yes' : 'no',
-			);
-		}
-
-		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable' ) );
-	}
-
-	/**
-	 * Clear compiled cache files
-	 *
-	 * ## OPTIONS
-	 *
-	 * [--path=<path>]
-	 * : Path to module directory (default: current directory)
-	 */
-	public function clear( $args, $assoc_args ) {
-		$path       = $assoc_args['path'] ?? getcwd();
-		$cache_file = $path . '/cache/wpdi-container.php';
-
-		if ( file_exists( $cache_file ) ) {
-			if ( unlink( $cache_file ) ) {
-				WP_CLI::success( "Cache cleared: {$cache_file}" );
-			} else {
-				WP_CLI::error( "Failed to delete cache file: {$cache_file}" );
-			}
-		} else {
-			WP_CLI::log( "No cache file found at: {$cache_file}" );
-		}
-
-		// Clear entire cache directory if empty
-		$cache_dir = dirname( $cache_file );
-		if ( is_dir( $cache_dir ) && 2 === count( scandir( $cache_dir ) ) ) { // Only . and ..
-			if ( rmdir( $cache_dir ) ) {
-				WP_CLI::success( 'Removed empty cache directory' );
-			}
-		}
-	}
-
-	/**
-	 * Get human-readable class type
-	 */
-	private function get_class_type( string $class ): string {
-		if ( ! class_exists( $class ) ) {
-			return 'unknown';
-		}
-
-		$reflection = new ReflectionClass( $class );
-
-		if ( $reflection->isInterface() ) {
-			return 'interface';
-		}
-
-		if ( $reflection->isAbstract() ) {
-			return 'abstract';
-		}
-
-		return 'concrete';
-	}
-
-	/**
-	 * Check if class is autowirable
-	 */
-	private function is_autowirable( string $class ): bool {
-		if ( ! class_exists( $class ) ) {
-			return false;
-		}
-
-		try {
-			$reflection = new ReflectionClass( $class );
-
-			return $reflection->isInstantiable() && ! $reflection->isAbstract();
-		} catch ( Exception $e ) {
-			return false;
 		}
 	}
 }
