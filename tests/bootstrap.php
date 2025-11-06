@@ -49,13 +49,13 @@ if ( ! function_exists( 'current_time' ) ) {
 }
 
 // Load WPDI core files (since init.php has WordPress checks)
-require_once dirname( __DIR__ ) . '/src/exceptions/class-wpdi-exception.php';
-require_once dirname( __DIR__ ) . '/src/exceptions/class-container-exception.php';
-require_once dirname( __DIR__ ) . '/src/exceptions/class-not-found-exception.php';
-require_once dirname( __DIR__ ) . '/src/exceptions/class-circular-dependency-exception.php';
-require_once dirname( __DIR__ ) . '/src/class-auto-discovery.php';
-require_once dirname( __DIR__ ) . '/src/class-compiler.php';
-require_once dirname( __DIR__ ) . '/src/class-container.php';
-require_once dirname( __DIR__ ) . '/src/class-scope.php';
+require_once dirname( __DIR__ ) . '/src/Exceptions/Wpdi_Exception.php';
+require_once dirname( __DIR__ ) . '/src/Exceptions/Container_Exception.php';
+require_once dirname( __DIR__ ) . '/src/Exceptions/Not_Found_Exception.php';
+require_once dirname( __DIR__ ) . '/src/Exceptions/Circular_Dependency_Exception.php';
+require_once dirname( __DIR__ ) . '/src/Auto_Discovery.php';
+require_once dirname( __DIR__ ) . '/src/Compiler.php';
+require_once dirname( __DIR__ ) . '/src/Container.php';
+require_once dirname( __DIR__ ) . '/src/Scope.php';
 
 echo "WPDI Test Bootstrap loaded\n";
