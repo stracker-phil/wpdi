@@ -58,4 +58,13 @@ require_once dirname( __DIR__ ) . '/src/Compiler.php';
 require_once dirname( __DIR__ ) . '/src/Container.php';
 require_once dirname( __DIR__ ) . '/src/Scope.php';
 
+// Load WP_CLI mocks
+require_once __DIR__ . '/mocks/WP_CLI.php';
+require_once __DIR__ . '/mocks/WP_CLI_Utils.php';
+
+// Load WP-CLI command classes for testing
+require_once dirname( __DIR__ ) . '/src/Commands/Compile_Command.php';
+require_once dirname( __DIR__ ) . '/src/Commands/Discover_Command.php';
+require_once dirname( __DIR__ ) . '/src/Commands/Clear_Command.php';
+
 echo "WPDI Test Bootstrap loaded\n";
