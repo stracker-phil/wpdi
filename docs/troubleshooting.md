@@ -15,20 +15,21 @@ Fatal error: Class 'My_Service' not found
 1. **File not in `src/` directory**
    ```bash
    # ❌ Wrong location
-   /my-plugin/includes/class-my-service.php
-   
-   # ✅ Correct location  
-   /my-plugin/src/class-my-service.php
+   /my-plugin/includes/My_Service.php
+
+   # ✅ Correct location
+   /my-plugin/src/My_Service.php
    ```
 
 2. **Incorrect file naming**
    ```bash
-   # ❌ Wrong naming
-   /src/MyService.php
+   # ❌ Wrong naming (doesn't match class name)
+   /src/class-my-service.php  (old WordPress style - no longer used)
    /src/my-service.php
-   
-   # ✅ Correct naming
-   /src/class-my-service.php
+   /src/MyService.php         (wrong case if class is My_Service)
+
+   # ✅ Correct naming (PSR-4: matches class name exactly)
+   /src/My_Service.php
    ```
 
 3. **Class name doesn't match WordPress conventions**
@@ -386,8 +387,8 @@ When reporting issues, include:
 ### Common Solutions Checklist
 
 - [ ] Files in `src/` directory?
-- [ ] WordPress file naming (`class-my-service.php`)?
-- [ ] WordPress class naming (`My_Service`)?
+- [ ] PSR-4 file naming (`My_Service.php` matches class name)?
+- [ ] WordPress class naming (`My_Service` with underscores)?
 - [ ] Interfaces bound in `wpdi-config.php`?
 - [ ] Factory functions return objects?
 - [ ] No circular dependencies?

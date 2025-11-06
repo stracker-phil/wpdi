@@ -54,7 +54,7 @@ ddev composer update
 
 ### Core Components
 
-**1. Container (`src/class-container.php`)**
+**1. Container (`src/Container.php`)**
 
 - PSR-11 dependency injection container
 - Autowiring via PHP reflection
@@ -62,26 +62,34 @@ ddev composer update
 - Config loading from `wpdi-config.php`
 - Circular dependency detection with helpful error messages
 
-**2. Scope (`src/class-scope.php`)**
+**2. Scope (`src/Scope.php`)**
 
 - Base class for WordPress modules (plugins/themes)
 - Composition root pattern - only place with container access
 - Calls `bootstrap()` where user resolves root service
 
-**3. Auto_Discovery (`src/class-auto-discovery.php`)**
+**3. Auto_Discovery (`src/Auto_Discovery.php`)**
 
 - Scans `src/` directory for concrete classes
 - Tokenizes PHP files to extract namespaces and class names
 - PHP 8+ compatibility: handles `T_NAME_QUALIFIED` token
 - Filters to only instantiable, concrete classes
 
-**4. Compiler (`src/class-compiler.php`)**
+**4. Compiler (`src/Compiler.php`)**
 
 - Caches **discovered class names** (not factory closures)
 - Creates `cache/wpdi-container.php` with simple array export
 - Production optimization: skips auto-discovery on cached systems
 
-**5. Exception Hierarchy (`src/exceptions/`)**
+**5. WP-CLI Commands (`src/Commands/`)**
+
+- **cli.php** - Registration file that loads and registers all commands
+- **Compile_Command.php** - Compiles container cache for production
+- **Discover_Command.php** - Discovers and lists classes with metadata
+- **Clear_Command.php** - Clears compiled cache files
+- Each command follows Single Responsibility Principle
+
+**6. Exception Hierarchy (`src/Exceptions/`)**
 
 ```
 WPDI_Exception (base for all library exceptions)
@@ -163,8 +171,10 @@ try {
 
 **File Naming Convention:**
 
-- Classes: `class-my-service.php` (WordPress style)
+- Classes: `My_Service.php` (PSR-4 style)
+- Folders: `Commands/`, `Exceptions/` (PSR-4 PascalCase matching namespaces)
 - Tests: `MyServiceTest.php` (PSR-4 style)
+- All files follow PSR-4 naming for better IDE support and autoloading compatibility
 
 **init.php Entry Point:**
 
