@@ -14,5 +14,5 @@ require_once __DIR__ . '/src/Container.php';
 require_once __DIR__ . '/src/Scope.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
-	require_once __DIR__ . '/src/Commands/Compile_Command.php';
+	require_once __DIR__ . '/src/Commands/cli.php';
 }
