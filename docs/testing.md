@@ -314,8 +314,8 @@ tests/
 │   ├── test-plugin-integration.php
 │   └── test-hook-integration.php
 ├── mocks/
-│   ├── class-mock-api-client.php
-│   └── class-test-logger.php
+│   ├── Mock_API_Client.php
+│   └── Test_Logger.php
 └── bootstrap.php
 ```
 

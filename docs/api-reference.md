@@ -253,19 +253,22 @@ WPDI automatically discovers classes that are:
 
 ### File Naming
 
-WPDI expects WordPress-style file naming:
+WPDI uses PSR-4 file naming conventions:
 
-- ✅ `class-my-service.php` - Correct
-- ❌ `MyService.php` - Not discovered
+- ✅ `My_Service.php` - Correct (matches class name)
+- ✅ `Payment_Processor.php` - Correct (matches class name)
+- ❌ `class-my-service.php` - Not discovered (old WordPress style)
 - ❌ `my-service.php` - Not discovered
+
+Files must be named exactly as the class name they contain (case-sensitive on most systems).
 
 ### Class Naming
 
-Class names must match WordPress conventions:
+Class names should use WordPress conventions with underscores:
 
-- ✅ `My_Service` - Correct
-- ✅ `Payment_Processor` - Correct
-- ❌ `MyService` - Works but not WordPress style
+- ✅ `My_Service` - Correct (WordPress style with underscores)
+- ✅ `Payment_Processor` - Correct (WordPress style with underscores)
+- ⚠️ `MyService` - Works but not WordPress style (PascalCase without underscores)
 
 ## Performance Considerations
 

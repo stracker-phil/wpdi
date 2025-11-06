@@ -42,7 +42,7 @@ new My_Payment_Plugin();
 
 ```php
 <?php
-// src/class-payment-processor.php
+// src/Payment_Processor.php
 
 class Payment_Processor {
     public function __construct( 

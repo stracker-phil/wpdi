@@ -54,7 +54,7 @@ new My_Sample_Plugin();
 
 ```php
 <?php
-// src/class-sample-application.php
+// src/Sample_Application.php
 
 class Sample_Application {
     private Sample_Service $service;
@@ -87,7 +87,7 @@ class Sample_Application {
 
 ```php
 <?php
-// src/class-sample-service.php
+// src/Sample_Service.php
 
 class Sample_Service {
     private Sample_Config $config;
@@ -116,7 +116,7 @@ class Sample_Service {
 
 ```php
 <?php
-// src/class-sample-config.php
+// src/Sample_Config.php
 
 class Sample_Config {
     private bool $enabled;
@@ -139,7 +139,7 @@ class Sample_Config {
 
 ```php
 <?php
-// src/class-sample-logger.php
+// src/Sample_Logger.php
 
 class Sample_Logger {
     private string $prefix;
