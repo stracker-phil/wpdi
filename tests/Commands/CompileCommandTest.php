@@ -65,7 +65,7 @@ class CompileCommandTest extends TestCase {
 	/**
 	 * GIVEN a valid module directory with classes
 	 * WHEN compiling for the first time
-	 * THEN cache should be created successfully
+	 * THEN cache should be created successfully with correct content
 	 */
 	public function test_compiles_cache_successfully_for_new_project(): void {
 		// Create a test class file
@@ -79,11 +79,16 @@ class CompileCommandTest extends TestCase {
 
 		// Verify cache file was created
 		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
-		$this->assertFileExists( $cache_file );
+		$this->assertFileExists( $cache_file, 'Cache file should be created' );
+
+		// Verify cache file contains the class
+		$cache_content = require $cache_file;
+		$this->assertIsArray( $cache_content, 'Cache should return array' );
+		$this->assertContains( 'Test_Service', $cache_content, 'Cache should contain discovered class' );
 
 		// Verify success message was called
 		$success_calls = $this->getWpCliCalls( 'success' );
-		$this->assertCount( 1, $success_calls );
+		$this->assertCount( 1, $success_calls, 'Should show success message' );
 		$this->assertStringContainsString( 'compiled successfully', $success_calls[0]['args'][0] );
 	}
 
@@ -202,41 +207,15 @@ class CompileCommandTest extends TestCase {
 	}
 
 	/**
-	 * GIVEN a project with multiple classes
+	 * GIVEN a project with multiple classes and configuration
 	 * WHEN compiling
-	 * THEN should list all discovered classes
+	 * THEN should log all discovered classes, configuration, and progress messages
 	 */
-	public function test_lists_all_discovered_classes(): void {
+	public function test_logs_complete_compilation_process(): void {
 		// Create multiple test classes
 		$this->createTestClass( 'Service_One' );
 		$this->createTestClass( 'Service_Two' );
 		$this->createTestClass( 'Service_Three' );
-
-		$command = new Compile_Command();
-		$command->__invoke(
-			array(),
-			array( 'path' => $this->temp_dir )
-		);
-
-		// Verify log calls include all classes
-		$log_calls    = $this->getWpCliCalls( 'log' );
-		$log_messages = array_column( array_column( $log_calls, 'args' ), 0 );
-		$all_logs     = implode( "\n", $log_messages );
-
-		$this->assertStringContainsString( 'Service_One', $all_logs );
-		$this->assertStringContainsString( 'Service_Two', $all_logs );
-		$this->assertStringContainsString( 'Service_Three', $all_logs );
-		$this->assertStringContainsString( 'Found 3 classes', $all_logs );
-	}
-
-	/**
-	 * GIVEN a wpdi-config.php file exists
-	 * WHEN compiling
-	 * THEN should load and show configuration
-	 */
-	public function test_loads_and_shows_configuration_when_present(): void {
-		// Create test class
-		$this->createTestClass( 'Test_Service' );
 
 		// Create config file
 		$config_content = <<<'PHP'
@@ -254,15 +233,28 @@ PHP;
 			array( 'path' => $this->temp_dir )
 		);
 
-		// Verify config loading was logged
+		// Get all log messages
 		$log_calls    = $this->getWpCliCalls( 'log' );
 		$log_messages = array_column( array_column( $log_calls, 'args' ), 0 );
 		$all_logs     = implode( "\n", $log_messages );
 
-		$this->assertStringContainsString( 'Loading configuration from wpdi-config.php', $all_logs );
-		$this->assertStringContainsString( 'Manual configurations: 2', $all_logs );
-		$this->assertStringContainsString( 'Logger_Interface', $all_logs );
-		$this->assertStringContainsString( 'Config_Interface', $all_logs );
+		// Verify all discovered classes are listed
+		$this->assertStringContainsString( 'Service_One', $all_logs, 'Should log Service_One' );
+		$this->assertStringContainsString( 'Service_Two', $all_logs, 'Should log Service_Two' );
+		$this->assertStringContainsString( 'Service_Three', $all_logs, 'Should log Service_Three' );
+		$this->assertStringContainsString( 'Found 3 classes', $all_logs, 'Should show class count' );
+
+		// Verify configuration loading
+		$this->assertStringContainsString( 'Loading configuration from wpdi-config.php', $all_logs, 'Should log config loading' );
+		$this->assertStringContainsString( 'Manual configurations: 2', $all_logs, 'Should show config count' );
+		$this->assertStringContainsString( 'Logger_Interface', $all_logs, 'Should list Logger_Interface' );
+		$this->assertStringContainsString( 'Config_Interface', $all_logs, 'Should list Config_Interface' );
+
+		// Verify progress messages appear in order
+		$this->assertStringContainsString( 'Discovering classes', $log_messages[0], 'First message should be discovery' );
+		$this->assertStringContainsString( 'Found', $log_messages[1], 'Second message should show count' );
+		$this->assertStringContainsString( 'Compiling container cache', $all_logs, 'Should show compilation step' );
+		$this->assertStringContainsString( 'Total discovered classes', $all_logs, 'Should show summary' );
 	}
 
 	/**
@@ -284,35 +276,14 @@ PHP;
 
 			// Verify cache was created in current directory
 			$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
-			$this->assertFileExists( $cache_file );
+			$this->assertFileExists( $cache_file, 'Cache should be created in current directory' );
+
+			// Verify cache content
+			$cache_content = require $cache_file;
+			$this->assertContains( 'Test_Service', $cache_content, 'Cache should contain discovered class' );
 		} finally {
 			chdir( $original_cwd );
 		}
-	}
-
-	/**
-	 * GIVEN compilation process shows all expected steps
-	 * WHEN compiling
-	 * THEN should log discovery, compilation, and success messages
-	 */
-	public function test_shows_compilation_progress_messages(): void {
-		$this->createTestClass( 'Test_Service' );
-
-		$command = new Compile_Command();
-		$command->__invoke(
-			array(),
-			array( 'path' => $this->temp_dir )
-		);
-
-		// Get all log messages
-		$log_calls    = $this->getWpCliCalls( 'log' );
-		$log_messages = array_column( array_column( $log_calls, 'args' ), 0 );
-
-		// Verify expected messages appear in order
-		$this->assertStringContainsString( 'Discovering classes', $log_messages[0] );
-		$this->assertStringContainsString( 'Found', $log_messages[1] );
-		$this->assertStringContainsString( 'Compiling container cache', $log_messages[3] );
-		$this->assertStringContainsString( 'Total discovered classes', $log_messages[4] );
 	}
 
 	/**

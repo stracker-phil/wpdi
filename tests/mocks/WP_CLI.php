@@ -92,6 +92,32 @@ class WP_CLI {
 	public static function reset_calls(): void {
 		self::$calls = array();
 	}
+
+	/**
+	 * Track a method call (used by other mock classes)
+	 *
+	 * Allows other mock classes (like WP_CLI\Utils) to register their calls
+	 * in the same tracking array for unified test verification.
+	 *
+	 * @param string $method Method name.
+	 * @param array  $args   Method arguments.
+	 */
+	public static function track_call( string $method, array $args ): void {
+		self::$calls[] = array(
+			'method' => $method,
+			'args'   => $args,
+		);
+	}
+
+	/**
+	 * Mock add_command method - does nothing in tests
+	 *
+	 * @param string $name Command name.
+	 * @param mixed  $callable Command handler.
+	 */
+	public static function add_command( string $name, $callable ): void {
+		// No-op in tests
+	}
 }
 
 /**
