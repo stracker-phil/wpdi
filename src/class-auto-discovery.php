@@ -7,7 +7,6 @@ namespace WPDI;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
-use Exception;
 
 /**
  * Discovers classes for auto-registration
@@ -114,14 +113,9 @@ class Auto_Discovery {
 				continue;
 			}
 
-			try {
-				$reflection = new ReflectionClass( $class );
-				if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
-					$concrete[] = $class;
-				}
-			} catch ( Exception $e ) {
-				// Skip classes that can't be reflected
-				continue;
+			$reflection = new ReflectionClass( $class );
+			if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
+				$concrete[] = $class;
 			}
 		}
 

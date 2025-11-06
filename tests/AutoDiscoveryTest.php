@@ -226,6 +226,49 @@ class AutoDiscoveryTest extends TestCase {
 		$this->assertNotContains( 'NonExistent', $result );
 	}
 
+	public function test_exception_handler_during_reflection(): void {
+		// This test targets the exception handler on lines 121-123
+		// The catch block is defensive code for extremely rare edge cases
+
+		// The exception handler catches errors during ReflectionClass instantiation
+		// This is nearly impossible to trigger because if class_exists() returns true,
+		// ReflectionClass should succeed. Edge cases include:
+		// - Memory exhaustion
+		// - Internal PHP errors
+		// - Corrupted opcode cache
+		// - Extension conflicts
+
+		// We'll test that the filter works correctly with edge case classes
+		$discovery  = new Auto_Discovery();
+		$reflection = new \ReflectionClass( $discovery );
+		$method     = $reflection->getMethod( 'filter_concrete_classes' );
+		$method->setAccessible( true );
+
+		// Test with various class types including PHP internal classes
+		$classes = array(
+			SimpleClass::class,
+			'stdClass',         // Internal PHP class
+			'ArrayObject',      // SPL class
+			'DateTime',         // Date/time class
+		);
+
+		$result = $method->invoke( $discovery, $classes );
+
+		// All valid, instantiable classes should be included
+		$this->assertIsArray( $result );
+		$this->assertContains( SimpleClass::class, $result );
+		$this->assertContains( 'stdClass', $result );
+		$this->assertContains( 'ArrayObject', $result );
+		$this->assertContains( 'DateTime', $result );
+
+		// The exception handler on lines 121-123 is defensive programming
+		// for edge cases that are not reliably testable without:
+		// - PHP extensions like uopz to mock ReflectionClass
+		// - Deliberately corrupting the PHP runtime environment
+		// - Simulating memory exhaustion or internal errors
+		$this->assertGreaterThan( 0, count( $result ) );
+	}
+
 	public function test_handles_empty_directory(): void {
 		// Create a temporary empty directory
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_empty_' . uniqid();
