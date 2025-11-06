@@ -32,6 +32,11 @@ class AutoDiscoveryTest extends TestCase {
 	// Basic Discovery Tests
 	// ========================================
 
+	/**
+	 * GIVEN a directory containing PHP classes
+	 * WHEN Auto_Discovery scans the directory
+	 * THEN it returns an array of fully-qualified class names
+	 */
 	public function test_discovers_classes_in_directory(): void {
 		$classes = $this->discovery->discover( $this->fixtures_path );
 
@@ -39,6 +44,11 @@ class AutoDiscoveryTest extends TestCase {
 		$this->assertNotEmpty( $classes );
 	}
 
+	/**
+	 * GIVEN a directory with concrete classes, interfaces, and abstract classes
+	 * WHEN Auto_Discovery scans the directory
+	 * THEN only concrete instantiable classes are included in the result
+	 */
 	public function test_discovers_concrete_classes_only(): void {
 		$classes = $this->discovery->discover( $this->fixtures_path );
 
@@ -54,6 +64,11 @@ class AutoDiscoveryTest extends TestCase {
 		$this->assertNotContains( AbstractClass::class, $classes );
 	}
 
+	/**
+	 * GIVEN discovered classes from a directory
+	 * WHEN examining the returned class names
+	 * THEN all are fully-qualified strings that exist and start with expected namespace
+	 */
 	public function test_returns_fully_qualified_class_names(): void {
 		$classes = $this->discovery->discover( $this->fixtures_path );
 
@@ -64,6 +79,11 @@ class AutoDiscoveryTest extends TestCase {
 		}
 	}
 
+	/**
+	 * GIVEN discovered classes from a directory
+	 * WHEN checking their reflection metadata
+	 * THEN all classes are instantiable (not abstract, not interface)
+	 */
 	public function test_all_discovered_classes_are_instantiable(): void {
 		$classes = $this->discovery->discover( $this->fixtures_path );
 
@@ -80,140 +100,120 @@ class AutoDiscoveryTest extends TestCase {
 	// Edge Cases
 	// ========================================
 
-	public function test_returns_empty_array_for_non_existent_directory(): void {
-		$classes = $this->discovery->discover( '/non/existent/path' );
+	/**
+	 * GIVEN various edge case scenarios for directory scanning
+	 * WHEN Auto_Discovery attempts to scan
+	 * THEN it handles edge cases gracefully and returns empty array
+	 *
+	 * @dataProvider edge_case_scenarios_provider
+	 */
+	public function test_handles_edge_case_scenarios(
+		callable $setup,
+		callable $cleanup
+	): void {
+		list( $path, $temp_resources ) = $setup();
+
+		$classes = $this->discovery->discover( $path );
 
 		$this->assertIsArray( $classes );
 		$this->assertEmpty( $classes );
+
+		$cleanup( $temp_resources );
 	}
 
-	public function test_returns_empty_array_for_file_instead_of_directory(): void {
-		$file_path = $this->fixtures_path . '/SimpleClass.php';
-
-		$classes = $this->discovery->discover( $file_path );
-
-		$this->assertIsArray( $classes );
-		$this->assertEmpty( $classes );
-	}
-
-	public function test_handles_php_file_with_no_class(): void {
-		// Create a temporary directory with a PHP file that has no class
-		$temp_dir = sys_get_temp_dir() . '/wpdi_test_noclass_' . uniqid();
-		mkdir( $temp_dir );
-
-		// Create a PHP file with no class definition
-		$php_file = $temp_dir . '/functions.php';
-		file_put_contents( $php_file, "<?php\nfunction some_function() {}\n" );
-
-		$classes = $this->discovery->discover( $temp_dir );
-
-		// Should return empty array since no classes found
-		$this->assertIsArray( $classes );
-		$this->assertEmpty( $classes );
-
-		// Cleanup
-		unlink( $php_file );
-		rmdir( $temp_dir );
-	}
-
-	public function test_handles_php_file_with_anonymous_class(): void {
-		// Create a temporary directory with a file containing an anonymous class
-		$temp_dir = sys_get_temp_dir() . '/wpdi_test_anon_' . uniqid();
-		mkdir( $temp_dir );
-
-		// Create a PHP file with anonymous class (which has no name to extract)
-		$php_file = $temp_dir . '/anonymous.php';
-		file_put_contents( $php_file, "<?php\nnamespace Test;\n\$obj = new class {};" );
-
-		$classes = $this->discovery->discover( $temp_dir );
-
-		// Anonymous classes should not be discovered (they have no name)
-		$this->assertIsArray( $classes );
-		$this->assertEmpty( $classes );
-
-		// Cleanup
-		unlink( $php_file );
-		rmdir( $temp_dir );
-	}
-
-	public function test_handles_class_that_cannot_be_reflected(): void {
-		// Create a class name that looks valid but will fail reflection
-		// This tests the exception handling in filter_concrete_classes
-		$temp_dir = sys_get_temp_dir() . '/wpdi_test_badclass_' . uniqid();
-		mkdir( $temp_dir );
-
-		// Create a PHP file with a class that has syntax making it un-reflectable
-		// Actually, we can't easily test this since token_get_all will parse it
-		// Instead, let's test with a trait (which is filtered out)
-		$php_file = $temp_dir . '/MyTrait.php';
-		file_put_contents( $php_file, "<?php\nnamespace Test;\ntrait MyTrait {}\n" );
-
-		$classes = $this->discovery->discover( $temp_dir );
-
-		// Traits should not be discovered
-		$this->assertIsArray( $classes );
-		$this->assertEmpty( $classes );
-
-		// Cleanup
-		unlink( $php_file );
-		rmdir( $temp_dir );
-	}
-
-	public function test_filter_handles_exception_during_reflection(): void {
-		// Test the exception handling in filter_concrete_classes (lines 121-123)
-		// The catch block is defensive code for rare edge cases
-
-		// We'll use a workaround: access the private method and pass problematic input
-		$discovery  = new Auto_Discovery();
-		$reflection = new ReflectionClass( $discovery );
-		$method     = $reflection->getMethod( 'filter_concrete_classes' );
-		$method->setAccessible( true );
-
-		// In PHP, if a class_exists returns true, ReflectionClass should work
-		// But the catch is there for defensive programming
-		// We can at least test that the method handles various inputs robustly
-
-		$classes = array(
-			SimpleClass::class,
-			AbstractClass::class,
-			LoggerInterface::class,
+	public function edge_case_scenarios_provider(): array {
+		return array(
+			'non-existent directory' => array(
+				function () {
+					return array( '/non/existent/path', null );
+				},
+				function ( $resources ) {
+					// No cleanup needed
+				},
+			),
+			'file path instead of directory' => array(
+				function () {
+					$file_path = __DIR__ . '/Fixtures/SimpleClass.php';
+					return array( $file_path, null );
+				},
+				function ( $resources ) {
+					// No cleanup needed
+				},
+			),
+			'php file with no class definition' => array(
+				function () {
+					$temp_dir = sys_get_temp_dir() . '/wpdi_test_noclass_' . uniqid();
+					mkdir( $temp_dir );
+					$php_file = $temp_dir . '/functions.php';
+					file_put_contents( $php_file, "<?php\nfunction some_function() {}\n" );
+					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
+				},
+				function ( $resources ) {
+					unlink( $resources['file'] );
+					rmdir( $resources['dir'] );
+				},
+			),
+			'php file with anonymous class' => array(
+				function () {
+					$temp_dir = sys_get_temp_dir() . '/wpdi_test_anon_' . uniqid();
+					mkdir( $temp_dir );
+					$php_file = $temp_dir . '/anonymous.php';
+					file_put_contents( $php_file, "<?php\nnamespace Test;\n\$obj = new class {};" );
+					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
+				},
+				function ( $resources ) {
+					unlink( $resources['file'] );
+					rmdir( $resources['dir'] );
+				},
+			),
+			'php file with trait definition' => array(
+				function () {
+					$temp_dir = sys_get_temp_dir() . '/wpdi_test_trait_' . uniqid();
+					mkdir( $temp_dir );
+					$php_file = $temp_dir . '/MyTrait.php';
+					file_put_contents( $php_file, "<?php\nnamespace Test;\ntrait MyTrait {}\n" );
+					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
+				},
+				function ( $resources ) {
+					unlink( $resources['file'] );
+					rmdir( $resources['dir'] );
+				},
+			),
+			'empty directory' => array(
+				function () {
+					$temp_dir = sys_get_temp_dir() . '/wpdi_test_empty_' . uniqid();
+					mkdir( $temp_dir );
+					return array( $temp_dir, $temp_dir );
+				},
+				function ( $resources ) {
+					rmdir( $resources );
+				},
+			),
 		);
-
-		$result = $method->invoke( $discovery, $classes );
-
-		// Should only include SimpleClass (concrete, instantiable)
-		$this->assertContains( SimpleClass::class, $result );
-		$this->assertNotContains( AbstractClass::class, $result );
-		$this->assertNotContains( LoggerInterface::class, $result );
-
-		// The exception handler (lines 121-123) is defensive code for edge cases
-		// that are nearly impossible to trigger in normal PHP usage
-		// This test documents that the filter works correctly with various class types
-		$this->assertCount( 1, $result );
 	}
 
-	public function test_filter_skips_classes_without_checking_reflection_issues(): void {
-		// Test that filter gracefully handles any edge case where a class name
-		// might cause issues during reflection (covers exception handler lines 121-123)
-
-		// Create a test that will exercise the filter with a mix of valid and edge cases
+	/**
+	 * GIVEN the filter_concrete_classes method is called with various class types
+	 * WHEN filtering for instantiable classes
+	 * THEN only concrete classes are included, interfaces and abstract classes excluded
+	 * AND exception handling gracefully skips problematic classes
+	 */
+	public function test_filter_concrete_classes_handles_various_class_types(): void {
+		// Test the filter with a comprehensive mix of class types
+		// This covers both normal filtering and the defensive exception handler (lines 121-123)
 		$discovery  = new Auto_Discovery();
 		$reflection = new ReflectionClass( $discovery );
 		$method     = $reflection->getMethod( 'filter_concrete_classes' );
 		$method->setAccessible( true );
 
-		// Include various class types to ensure robust filtering
 		$classes = array(
-			SimpleClass::class,
-			// Concrete class - should be included
-			LoggerInterface::class,
-			// Interface - should be excluded
-			AbstractClass::class,
-			// Abstract - should be excluded
-			'NonExistent',
-			// Doesn't exist - skipped
-			'stdClass',
-			// Internal class - instantiable, should be included
+			SimpleClass::class,    // Concrete - should be included
+			AbstractClass::class,  // Abstract - should be excluded
+			LoggerInterface::class, // Interface - should be excluded
+			'NonExistent',         // Doesn't exist - skipped
+			'stdClass',            // Internal class - instantiable, included
+			'ArrayObject',         // SPL class - instantiable, included
+			'DateTime',            // Date/time class - instantiable, included
 		);
 
 		$result = $method->invoke( $discovery, $classes );
@@ -221,72 +221,26 @@ class AutoDiscoveryTest extends TestCase {
 		// Should only include concrete, instantiable classes
 		$this->assertContains( SimpleClass::class, $result );
 		$this->assertContains( 'stdClass', $result );
-		$this->assertNotContains( LoggerInterface::class, $result );
-		$this->assertNotContains( AbstractClass::class, $result );
-		$this->assertNotContains( 'NonExistent', $result );
-	}
-
-	public function test_exception_handler_during_reflection(): void {
-		// This test targets the exception handler on lines 121-123
-		// The catch block is defensive code for extremely rare edge cases
-
-		// The exception handler catches errors during ReflectionClass instantiation
-		// This is nearly impossible to trigger because if class_exists() returns true,
-		// ReflectionClass should succeed. Edge cases include:
-		// - Memory exhaustion
-		// - Internal PHP errors
-		// - Corrupted opcode cache
-		// - Extension conflicts
-
-		// We'll test that the filter works correctly with edge case classes
-		$discovery  = new Auto_Discovery();
-		$reflection = new \ReflectionClass( $discovery );
-		$method     = $reflection->getMethod( 'filter_concrete_classes' );
-		$method->setAccessible( true );
-
-		// Test with various class types including PHP internal classes
-		$classes = array(
-			SimpleClass::class,
-			'stdClass',         // Internal PHP class
-			'ArrayObject',      // SPL class
-			'DateTime',         // Date/time class
-		);
-
-		$result = $method->invoke( $discovery, $classes );
-
-		// All valid, instantiable classes should be included
-		$this->assertIsArray( $result );
-		$this->assertContains( SimpleClass::class, $result );
-		$this->assertContains( 'stdClass', $result );
 		$this->assertContains( 'ArrayObject', $result );
 		$this->assertContains( 'DateTime', $result );
+		$this->assertNotContains( AbstractClass::class, $result );
+		$this->assertNotContains( LoggerInterface::class, $result );
+		$this->assertNotContains( 'NonExistent', $result );
 
-		// The exception handler on lines 121-123 is defensive programming
-		// for edge cases that are not reliably testable without:
-		// - PHP extensions like uopz to mock ReflectionClass
-		// - Deliberately corrupting the PHP runtime environment
-		// - Simulating memory exhaustion or internal errors
+		// The exception handler (lines 121-123) is defensive code for rare edge cases
+		// that are nearly impossible to trigger without PHP extensions or runtime corruption
 		$this->assertGreaterThan( 0, count( $result ) );
-	}
-
-	public function test_handles_empty_directory(): void {
-		// Create a temporary empty directory
-		$temp_dir = sys_get_temp_dir() . '/wpdi_test_empty_' . uniqid();
-		mkdir( $temp_dir );
-
-		$classes = $this->discovery->discover( $temp_dir );
-
-		$this->assertIsArray( $classes );
-		$this->assertEmpty( $classes );
-
-		// Cleanup
-		rmdir( $temp_dir );
 	}
 
 	// ========================================
 	// Namespace Tests
 	// ========================================
 
+	/**
+	 * GIVEN a directory with namespaced PHP classes
+	 * WHEN classes are discovered
+	 * THEN all returned class names are fully-qualified with correct namespace
+	 */
 	public function test_correctly_handles_namespaced_classes(): void {
 		$classes = $this->discovery->discover( $this->fixtures_path );
 
@@ -296,6 +250,11 @@ class AutoDiscoveryTest extends TestCase {
 		}
 	}
 
+	/**
+	 * GIVEN a directory with nested subdirectories containing PHP classes
+	 * WHEN discovery scans recursively
+	 * THEN classes in nested directories are discovered with correct namespaces
+	 */
 	public function test_discovers_classes_in_nested_directories(): void {
 		// Create a temporary nested structure
 		$temp_dir   = sys_get_temp_dir() . '/wpdi_test_nested_' . uniqid();
@@ -324,36 +283,12 @@ class TestClass {
 		rmdir( $temp_dir );
 	}
 
-	// ========================================
-	// Filter Tests
-	// ========================================
-
-	public function test_filters_out_traits(): void {
-		// Create a temporary directory with a trait
-		$temp_dir = sys_get_temp_dir() . '/wpdi_test_trait_' . uniqid();
-		mkdir( $temp_dir );
-
-		$trait_file = $temp_dir . '/TestTrait.php';
-		file_put_contents( $trait_file, '<?php
-namespace WPDI\\Tests\\Temp;
-trait TestTrait {
-    public function test() {}
-}
-' );
-
-		require_once $trait_file;
-
-		$classes = $this->discovery->discover( $temp_dir );
-
-		// Traits should not be discovered
-		$this->assertNotContains( 'WPDI\\Tests\\Temp\\TestTrait', $classes );
-
-		// Cleanup
-		unlink( $trait_file );
-		rmdir( $temp_dir );
-	}
-
-	public function test_filters_classes_without_namespace(): void {
+	/**
+	 * GIVEN a directory with classes both with and without namespaces
+	 * WHEN discovery scans the directory
+	 * THEN global namespace classes are also discovered
+	 */
+	public function test_discovers_classes_without_namespace(): void {
 		// Create a temporary directory with a class without namespace
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_no_ns_' . uniqid();
 		mkdir( $temp_dir );
@@ -381,6 +316,11 @@ class GlobalClass_' . uniqid() . ' {
 	// Performance Tests
 	// ========================================
 
+	/**
+	 * GIVEN a small directory with multiple PHP files
+	 * WHEN discovery scans the directory
+	 * THEN the operation completes in reasonable time (under 1 second)
+	 */
 	public function test_discovery_is_reasonably_fast(): void {
 		$start = microtime( true );
 

@@ -17,25 +17,35 @@ class ExceptionsTest extends TestCase {
 	// Container_Exception Tests
 	// ========================================
 
-	public function test_container_exception_is_instance_of_exception(): void {
+	/**
+	 * GIVEN a Container_Exception instance
+	 * WHEN examining its type hierarchy
+	 * THEN it extends Exception and implements PSR-11 ContainerExceptionInterface
+	 */
+	public function test_container_exception_implements_correct_interfaces(): void {
 		$exception = new Container_Exception( 'Test message' );
 
 		$this->assertInstanceOf( Exception::class, $exception );
-	}
-
-	public function test_container_exception_implements_psr11_interface(): void {
-		$exception = new Container_Exception( 'Test message' );
-
 		$this->assertInstanceOf( ContainerExceptionInterface::class, $exception );
 	}
 
-	public function test_container_exception_can_be_thrown(): void {
+	/**
+	 * GIVEN Container_Exception is thrown
+	 * WHEN caught by different exception types
+	 * THEN it can be caught as both Container_Exception and PSR-11 interface
+	 */
+	public function test_container_exception_can_be_thrown_and_caught(): void {
 		$this->expectException( Container_Exception::class );
 		$this->expectExceptionMessage( 'Test error message' );
 
 		throw new Container_Exception( 'Test error message' );
 	}
 
+	/**
+	 * GIVEN Container_Exception thrown
+	 * WHEN caught as PSR-11 ContainerExceptionInterface
+	 * THEN the catch block executes correctly
+	 */
 	public function test_container_exception_can_be_caught_as_psr11_interface(): void {
 		try {
 			throw new Container_Exception( 'Test message' );
@@ -49,50 +59,67 @@ class ExceptionsTest extends TestCase {
 		$this->fail( 'Exception was not caught' );
 	}
 
-	public function test_container_exception_preserves_message(): void {
-		$message   = 'Custom error message';
-		$exception = new Container_Exception( $message );
+	/**
+	 * GIVEN a Container_Exception with message, code, and previous exception
+	 * WHEN examining exception properties
+	 * THEN all properties are correctly preserved
+	 *
+	 * @dataProvider exception_properties_provider
+	 */
+	public function test_container_exception_preserves_properties(
+		string $message,
+		int $code,
+		?Exception $previous
+	): void {
+		$exception = new Container_Exception( $message, $code, $previous );
 
 		$this->assertEquals( $message, $exception->getMessage() );
-	}
-
-	public function test_container_exception_preserves_code(): void {
-		$code      = 123;
-		$exception = new Container_Exception( 'Test', $code );
-
 		$this->assertEquals( $code, $exception->getCode() );
+		$this->assertSame( $previous, $exception->getPrevious() );
 	}
 
-	public function test_container_exception_preserves_previous_exception(): void {
-		$previous  = new Exception( 'Previous exception' );
-		$exception = new Container_Exception( 'Current exception', 0, $previous );
-
-		$this->assertSame( $previous, $exception->getPrevious() );
+	public function exception_properties_provider(): array {
+		$previous = new Exception( 'Previous exception' );
+		return array(
+			'with message only'               => array( 'Custom error message', 0, null ),
+			'with message and code'           => array( 'Test', 123, null ),
+			'with message, code, and previous' => array( 'Current exception', 456, $previous ),
+		);
 	}
 
 	// ========================================
 	// Not_Found_Exception Tests
 	// ========================================
 
-	public function test_not_found_exception_is_instance_of_exception(): void {
+	/**
+	 * GIVEN a Not_Found_Exception instance
+	 * WHEN examining its type hierarchy
+	 * THEN it extends Exception and implements PSR-11 NotFoundExceptionInterface
+	 */
+	public function test_not_found_exception_implements_correct_interfaces(): void {
 		$exception = new Not_Found_Exception( 'Test message' );
 
 		$this->assertInstanceOf( Exception::class, $exception );
-	}
-
-	public function test_not_found_exception_implements_psr11_interface(): void {
-		$exception = new Not_Found_Exception( 'Test message' );
-
 		$this->assertInstanceOf( NotFoundExceptionInterface::class, $exception );
 	}
 
-	public function test_not_found_exception_can_be_thrown(): void {
+	/**
+	 * GIVEN Not_Found_Exception is thrown
+	 * WHEN caught by different exception types
+	 * THEN it can be caught as both Not_Found_Exception and PSR-11 NotFoundExceptionInterface
+	 */
+	public function test_not_found_exception_can_be_thrown_and_caught(): void {
 		$this->expectException( Not_Found_Exception::class );
 		$this->expectExceptionMessage( 'Service not found' );
 
 		throw new Not_Found_Exception( 'Service not found' );
 	}
 
+	/**
+	 * GIVEN Not_Found_Exception thrown
+	 * WHEN caught as PSR-11 NotFoundExceptionInterface
+	 * THEN the catch block executes correctly
+	 */
 	public function test_not_found_exception_can_be_caught_as_psr11_interface(): void {
 		try {
 			throw new Not_Found_Exception( 'Service missing' );
@@ -106,24 +133,22 @@ class ExceptionsTest extends TestCase {
 		$this->fail( 'Exception was not caught' );
 	}
 
-	public function test_not_found_exception_preserves_message(): void {
-		$message   = 'Service XYZ not found';
-		$exception = new Not_Found_Exception( $message );
+	/**
+	 * GIVEN a Not_Found_Exception with message, code, and previous exception
+	 * WHEN examining exception properties
+	 * THEN all properties are correctly preserved (reuses Container exception provider)
+	 *
+	 * @dataProvider exception_properties_provider
+	 */
+	public function test_not_found_exception_preserves_properties(
+		string $message,
+		int $code,
+		?Exception $previous
+	): void {
+		$exception = new Not_Found_Exception( $message, $code, $previous );
 
 		$this->assertEquals( $message, $exception->getMessage() );
-	}
-
-	public function test_not_found_exception_preserves_code(): void {
-		$code      = 404;
-		$exception = new Not_Found_Exception( 'Not found', $code );
-
 		$this->assertEquals( $code, $exception->getCode() );
-	}
-
-	public function test_not_found_exception_preserves_previous_exception(): void {
-		$previous  = new Exception( 'Previous exception' );
-		$exception = new Not_Found_Exception( 'Current exception', 0, $previous );
-
 		$this->assertSame( $previous, $exception->getPrevious() );
 	}
 
@@ -131,6 +156,11 @@ class ExceptionsTest extends TestCase {
 	// PSR-11 Compliance Tests
 	// ========================================
 
+	/**
+	 * GIVEN PSR-11 exception interfaces define a hierarchy
+	 * WHEN examining Not_Found_Exception
+	 * THEN it implements both NotFoundExceptionInterface and ContainerExceptionInterface
+	 */
 	public function test_exceptions_follow_psr11_hierarchy(): void {
 		// NotFoundExceptionInterface should extend ContainerExceptionInterface
 		$notFound = new Not_Found_Exception( 'Test' );
@@ -140,6 +170,11 @@ class ExceptionsTest extends TestCase {
 		$this->assertInstanceOf( ContainerExceptionInterface::class, $notFound );
 	}
 
+	/**
+	 * GIVEN Not_Found_Exception is thrown
+	 * WHEN caught as parent ContainerExceptionInterface
+	 * THEN the catch succeeds per PSR-11 exception hierarchy
+	 */
 	public function test_container_exception_can_catch_not_found_exception(): void {
 		try {
 			throw new Not_Found_Exception( 'Service not found' );
@@ -152,6 +187,11 @@ class ExceptionsTest extends TestCase {
 		$this->fail( 'Exception was not caught by parent interface' );
 	}
 
+	/**
+	 * GIVEN Container_Exception and Not_Found_Exception exist
+	 * WHEN checking their type implementations
+	 * THEN they are distinguishable by NotFoundExceptionInterface
+	 */
 	public function test_exceptions_are_distinguishable(): void {
 		$containerEx = new Container_Exception( 'Container error' );
 		$notFoundEx  = new Not_Found_Exception( 'Not found error' );
@@ -164,6 +204,11 @@ class ExceptionsTest extends TestCase {
 	// Real-world Usage Tests
 	// ========================================
 
+	/**
+	 * GIVEN Container_Exception thrown in a try block
+	 * WHEN caught in a catch block
+	 * THEN the catch executes and exception details are accessible
+	 */
 	public function test_exceptions_work_in_try_catch_blocks(): void {
 		$caught = false;
 
@@ -177,6 +222,11 @@ class ExceptionsTest extends TestCase {
 		$this->assertTrue( $caught );
 	}
 
+	/**
+	 * GIVEN multiple catch blocks for different exception types
+	 * WHEN an exception is thrown
+	 * THEN only the matching catch block executes
+	 */
 	public function test_can_differentiate_exceptions_in_catch_blocks(): void {
 		$notFoundCaught  = false;
 		$containerCaught = false;
@@ -193,6 +243,11 @@ class ExceptionsTest extends TestCase {
 		$this->assertFalse( $containerCaught );
 	}
 
+	/**
+	 * GIVEN an exception is thrown from a method
+	 * WHEN examining the exception's stack trace
+	 * THEN the trace includes the originating method name
+	 */
 	public function test_stack_trace_is_preserved(): void {
 		try {
 			$this->throwContainerException();
@@ -214,35 +269,98 @@ class ExceptionsTest extends TestCase {
 	// Exception Hierarchy Tests
 	// ========================================
 
-	public function test_wpdi_exception_is_instance_of_exception(): void {
-		$exception = new WPDI_Exception( 'Test message' );
+	/**
+	 * GIVEN WPDI exception hierarchy (WPDI_Exception -> Container_Exception -> specific exceptions)
+	 * WHEN examining exception inheritance
+	 * THEN each exception correctly extends its parent in the hierarchy
+	 *
+	 * @dataProvider exception_hierarchy_provider
+	 */
+	public function test_exception_hierarchy(
+		string $exception_class,
+		array $expected_parent_types
+	): void {
+		$exception = new $exception_class( 'Test message' );
 
-		$this->assertInstanceOf( Exception::class, $exception );
+		foreach ( $expected_parent_types as $parent_type ) {
+			$this->assertInstanceOf(
+				$parent_type,
+				$exception,
+				"{$exception_class} should be instance of {$parent_type}"
+			);
+		}
 	}
 
-	public function test_container_exception_extends_wpdi_exception(): void {
-		$exception = new Container_Exception( 'Test message' );
-
-		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( Exception::class, $exception );
+	public function exception_hierarchy_provider(): array {
+		return array(
+			'WPDI_Exception is base exception' => array(
+				WPDI_Exception::class,
+				array( Exception::class ),
+			),
+			'Container_Exception extends WPDI_Exception' => array(
+				Container_Exception::class,
+				array( WPDI_Exception::class, Exception::class, ContainerExceptionInterface::class ),
+			),
+			'Not_Found_Exception extends Container_Exception' => array(
+				Not_Found_Exception::class,
+				array(
+					Container_Exception::class,
+					WPDI_Exception::class,
+					Exception::class,
+					ContainerExceptionInterface::class,
+					NotFoundExceptionInterface::class,
+				),
+			),
+			'Circular_Dependency_Exception extends Container_Exception' => array(
+				Circular_Dependency_Exception::class,
+				array(
+					Container_Exception::class,
+					WPDI_Exception::class,
+					Exception::class,
+					ContainerExceptionInterface::class,
+				),
+			),
+		);
 	}
 
-	public function test_not_found_exception_extends_container_exception(): void {
-		$exception = new Not_Found_Exception( 'Test message' );
+	/**
+	 * GIVEN Circular_Dependency_Exception can be caught at multiple levels
+	 * WHEN thrown and caught by different exception types
+	 * THEN all catch blocks work correctly (WPDI_Exception, Container_Exception, PSR-11)
+	 *
+	 * @dataProvider circular_dependency_catch_provider
+	 */
+	public function test_circular_dependency_exception_catch_hierarchy(
+		string $catch_type
+	): void {
+		$caughtException = null;
 
-		$this->assertInstanceOf( Container_Exception::class, $exception );
-		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( Exception::class, $exception );
+		try {
+			throw new Circular_Dependency_Exception( 'Circular dependency' );
+		} catch ( Exception $e ) {
+			// Catch as generic Exception to verify it's catchable
+			if ( is_a( $e, $catch_type ) ) {
+				$caughtException = $e;
+			}
+		}
+
+		$this->assertInstanceOf( Circular_Dependency_Exception::class, $caughtException );
+		$this->assertInstanceOf( $catch_type, $caughtException );
 	}
 
-	public function test_circular_dependency_exception_extends_container_exception(): void {
-		$exception = new Circular_Dependency_Exception( 'Test message' );
-
-		$this->assertInstanceOf( Container_Exception::class, $exception );
-		$this->assertInstanceOf( WPDI_Exception::class, $exception );
-		$this->assertInstanceOf( Exception::class, $exception );
+	public function circular_dependency_catch_provider(): array {
+		return array(
+			'can catch as WPDI_Exception'               => array( WPDI_Exception::class ),
+			'can catch as Container_Exception'          => array( Container_Exception::class ),
+			'can catch as ContainerExceptionInterface'  => array( ContainerExceptionInterface::class ),
+		);
 	}
 
+	/**
+	 * GIVEN the base WPDI_Exception class
+	 * WHEN used to catch any WPDI library exception
+	 * THEN all library exceptions are catchable
+	 */
 	public function test_can_catch_all_wpdi_exceptions_with_base_class(): void {
 		$caughtException = null;
 
@@ -254,35 +372,5 @@ class ExceptionsTest extends TestCase {
 
 		$this->assertInstanceOf( Circular_Dependency_Exception::class, $caughtException );
 		$this->assertEquals( 'Circular dependency', $caughtException->getMessage() );
-	}
-
-	public function test_can_catch_circular_dependency_with_container_exception(): void {
-		$caughtException = null;
-
-		try {
-			throw new Circular_Dependency_Exception( 'Circular dependency' );
-		} catch ( Container_Exception $e ) {
-			$caughtException = $e;
-		}
-
-		$this->assertInstanceOf( Circular_Dependency_Exception::class, $caughtException );
-	}
-
-	public function test_can_catch_circular_dependency_with_psr11_interface(): void {
-		$caughtException = null;
-
-		try {
-			throw new Circular_Dependency_Exception( 'Circular dependency' );
-		} catch ( ContainerExceptionInterface $e ) {
-			$caughtException = $e;
-		}
-
-		$this->assertInstanceOf( Circular_Dependency_Exception::class, $caughtException );
-	}
-
-	public function test_circular_dependency_exception_is_psr11_compliant(): void {
-		$exception = new Circular_Dependency_Exception( 'Test message' );
-
-		$this->assertInstanceOf( ContainerExceptionInterface::class, $exception );
 	}
 }

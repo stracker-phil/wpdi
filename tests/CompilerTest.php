@@ -46,6 +46,11 @@ class CompilerTest extends TestCase {
 	// Basic Compilation Tests
 	// ========================================
 
+	/**
+	 * GIVEN a list of class names to compile
+	 * WHEN compile() is called with a target file path
+	 * THEN a valid cache file is created at the specified location
+	 */
 	public function test_compile_creates_cache_file(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array(
@@ -59,6 +64,11 @@ class CompilerTest extends TestCase {
 		$this->assertFileExists( $cache_file );
 	}
 
+	/**
+	 * GIVEN a compiled cache file
+	 * WHEN examining its contents
+	 * THEN it contains valid PHP code that returns an array of class names
+	 */
 	public function test_compiled_file_contains_valid_php(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array(
@@ -73,6 +83,11 @@ class CompilerTest extends TestCase {
 		$this->assertStringContainsString( 'return', $content );
 	}
 
+	/**
+	 * GIVEN a compiled cache file exists
+	 * WHEN the file is required in PHP
+	 * THEN it returns the exact array of class names that was compiled
+	 */
 	public function test_compiled_file_can_be_required(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array(
@@ -91,6 +106,11 @@ class CompilerTest extends TestCase {
 		$this->assertContains( 'WPDI\Tests\Fixtures\ClassWithDependency', $compiled );
 	}
 
+	/**
+	 * GIVEN a compiled cache file
+	 * WHEN loaded and inspected
+	 * THEN it contains only class names (not closures or complex data structures)
+	 */
 	public function test_compiled_cache_is_simple_array(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array(
@@ -110,6 +130,11 @@ class CompilerTest extends TestCase {
 	// Cache Directory Tests
 	// ========================================
 
+	/**
+	 * GIVEN a cache file path with non-existent parent directories
+	 * WHEN compile() is called
+	 * THEN the necessary directories are created automatically
+	 */
 	public function test_compile_creates_cache_directory_if_missing(): void {
 		$nested_dir = $this->temp_dir . '/cache/nested';
 		$cache_file = $nested_dir . '/cache.php';
@@ -127,45 +152,56 @@ class CompilerTest extends TestCase {
 	// Multiple Bindings Tests
 	// ========================================
 
-	public function test_compile_handles_multiple_classes(): void {
+	/**
+	 * GIVEN multiple class names to compile
+	 * WHEN the compiler processes them
+	 * THEN all classes are included in the cache in the correct order
+	 *
+	 * @dataProvider multiple_classes_provider
+	 */
+	public function test_compile_handles_multiple_classes(
+		array $classes,
+		int $expected_count
+	): void {
 		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			SimpleClass::class,
-			'WPDI\Tests\Fixtures\ArrayLogger',
-			'WPDI\Tests\Fixtures\ClassWithDependency',
-		);
 
 		$this->compiler->compile( $classes, $cache_file );
 		$compiled = require $cache_file;
 
-		$this->assertCount( 3, $compiled );
-		$this->assertContains( SimpleClass::class, $compiled );
-		$this->assertContains( 'WPDI\Tests\Fixtures\ArrayLogger', $compiled );
-		$this->assertContains( 'WPDI\Tests\Fixtures\ClassWithDependency', $compiled );
+		$this->assertCount( $expected_count, $compiled );
+		$this->assertEquals( $classes, $compiled );
 	}
 
-	public function test_compile_preserves_class_order(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			'ClassA',
-			'ClassB',
-			'ClassC',
+	public function multiple_classes_provider(): array {
+		return array(
+			'three classes' => array(
+				array(
+					SimpleClass::class,
+					'WPDI\Tests\Fixtures\ArrayLogger',
+					'WPDI\Tests\Fixtures\ClassWithDependency',
+				),
+				3,
+			),
+			'ordered classes' => array(
+				array( 'ClassA', 'ClassB', 'ClassC' ),
+				3,
+			),
+			'empty class list' => array(
+				array(),
+				0,
+			),
 		);
-
-		$this->compiler->compile( $classes, $cache_file );
-		$compiled = require $cache_file;
-
-		// Order should be preserved
-		$this->assertEquals( $classes, $compiled );
-		$this->assertEquals( 'ClassA', $compiled[0] );
-		$this->assertEquals( 'ClassB', $compiled[1] );
-		$this->assertEquals( 'ClassC', $compiled[2] );
 	}
 
 	// ========================================
 	// Content Tests
 	// ========================================
 
+	/**
+	 * GIVEN a compiled cache file
+	 * WHEN examining its header comments
+	 * THEN it contains metadata about generation time and class count
+	 */
 	public function test_compiled_file_contains_header_comment(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array( SimpleClass::class );
@@ -179,6 +215,11 @@ class CompilerTest extends TestCase {
 		$this->assertStringContainsString( 'Contains: 1 discovered classes', $content );
 	}
 
+	/**
+	 * GIVEN a compiled cache file
+	 * WHEN examining its contents
+	 * THEN it includes a timestamp indicating when it was generated
+	 */
 	public function test_compiled_file_includes_timestamp(): void {
 		$cache_file = $this->temp_dir . '/cache.php';
 		$classes    = array( SimpleClass::class );
@@ -194,6 +235,11 @@ class CompilerTest extends TestCase {
 	// Error Handling Tests
 	// ========================================
 
+	/**
+	 * GIVEN file system write permissions are denied
+	 * WHEN compile() attempts to write the cache file
+	 * THEN it returns false to indicate failure
+	 */
 	public function test_compile_returns_false_on_write_failure(): void {
 		// Create a read-only directory to test write failure
 		$readonly_dir = $this->temp_dir . '/readonly';
@@ -213,19 +259,5 @@ class CompilerTest extends TestCase {
 		chmod( $cache_file, 0644 );
 
 		$this->assertFalse( $result, 'Compile should return false when file_put_contents fails' );
-	}
-
-	public function test_compile_handles_empty_class_list(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array();
-
-		$result = $this->compiler->compile( $classes, $cache_file );
-
-		$this->assertTrue( $result );
-		$this->assertFileExists( $cache_file );
-
-		$compiled = require $cache_file;
-		$this->assertIsArray( $compiled );
-		$this->assertEmpty( $compiled );
 	}
 }
