@@ -35,6 +35,11 @@ class ContainerTest extends TestCase {
 	// Basic Binding and Resolution Tests
 	// ========================================
 
+	/**
+	 * GIVEN a fresh container
+	 * WHEN a simple class is bound and resolved
+	 * THEN the container returns a valid instance with expected behavior
+	 */
 	public function test_can_bind_and_resolve_simple_class(): void {
 		$this->container->bind( SimpleClass::class );
 
@@ -44,6 +49,11 @@ class ContainerTest extends TestCase {
 		$this->assertEquals( 'Hello from SimpleClass', $instance->get_message() );
 	}
 
+	/**
+	 * GIVEN a container
+	 * WHEN a class is bound with a custom factory closure
+	 * THEN the container uses the factory to create instances
+	 */
 	public function test_can_bind_with_custom_factory(): void {
 		$this->container->bind( SimpleClass::class, fn() => new SimpleClass() );
 
@@ -52,51 +62,100 @@ class ContainerTest extends TestCase {
 		$this->assertInstanceOf( SimpleClass::class, $instance );
 	}
 
-	public function test_singleton_returns_same_instance(): void {
-		$this->container->bind( SimpleClass::class, null, true );
+	/**
+	 * GIVEN a container with different singleton configurations
+	 * WHEN services are resolved multiple times
+	 * THEN singleton services return the same instance and non-singletons return different instances
+	 *
+	 * @dataProvider singleton_behavior_provider
+	 */
+	public function test_singleton_behavior( bool $is_singleton, bool $expect_same ): void {
+		$this->container->bind( SimpleClass::class, fn() => new SimpleClass(), $is_singleton );
 
 		$instance1 = $this->container->get( SimpleClass::class );
 		$instance2 = $this->container->get( SimpleClass::class );
 
-		$this->assertSame( $instance1, $instance2 );
-	}
-
-	public function test_non_singleton_returns_different_instances(): void {
-		$this->container->bind( SimpleClass::class, fn() => new SimpleClass(), false );
-
-		$instance1 = $this->container->get( SimpleClass::class );
-		$instance2 = $this->container->get( SimpleClass::class );
-
-		$this->assertNotSame( $instance1, $instance2 );
+		if ( $expect_same ) {
+			$this->assertSame( $instance1, $instance2 );
+		} else {
+			$this->assertNotSame( $instance1, $instance2 );
+		}
 		$this->assertInstanceOf( SimpleClass::class, $instance1 );
 		$this->assertInstanceOf( SimpleClass::class, $instance2 );
+	}
+
+	public function singleton_behavior_provider(): array {
+		return array(
+			'singleton returns same instance'         => array( true, true ),
+			'non-singleton returns different instances' => array( false, false ),
+		);
 	}
 
 	// ========================================
 	// Autowiring Tests
 	// ========================================
 
-	public function test_autowires_class_without_constructor(): void {
-		$instance = $this->container->get( SimpleClass::class );
+	/**
+	 * GIVEN a container with no explicit bindings
+	 * WHEN a class is resolved
+	 * THEN the container autowires it via reflection and injects all dependencies
+	 *
+	 * @dataProvider autowiring_scenarios_provider
+	 */
+	public function test_autowires_classes_with_varying_complexity(
+		string $class_name,
+		?callable $assertions
+	): void {
+		$instance = $this->container->get( $class_name );
 
-		$this->assertInstanceOf( SimpleClass::class, $instance );
+		$this->assertInstanceOf( $class_name, $instance );
+
+		if ( $assertions ) {
+			$assertions( $instance, $this );
+		}
 	}
 
-	public function test_autowires_class_with_dependency(): void {
-		$instance = $this->container->get( ClassWithDependency::class );
-
-		$this->assertInstanceOf( ClassWithDependency::class, $instance );
-		$this->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
+	public function autowiring_scenarios_provider(): array {
+		return array(
+			'class without constructor' => array(
+				SimpleClass::class,
+				null,
+			),
+			'class with single dependency' => array(
+				ClassWithDependency::class,
+				function ( $instance, $test ) {
+					$test->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
+				},
+			),
+			'class with multiple dependencies' => array(
+				ClassWithMultipleDependencies::class,
+				function ( $instance, $test ) {
+					$test->assertInstanceOf( SimpleClass::class, $instance->get_first() );
+					$test->assertInstanceOf( ClassWithDependency::class, $instance->get_second() );
+				},
+			),
+			'class with optional dependency' => array(
+				ClassWithOptionalDependency::class,
+				function ( $instance, $test ) {
+					$test->assertTrue( $instance->has_dependency() );
+					$test->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
+				},
+			),
+			'class with default values' => array(
+				ClassWithDefaultValue::class,
+				function ( $instance, $test ) {
+					$test->assertEquals( 'default', $instance->get_name() );
+					$test->assertEquals( 10, $instance->get_count() );
+				},
+			),
+		);
 	}
 
-	public function test_autowires_class_with_multiple_dependencies(): void {
-		$instance = $this->container->get( ClassWithMultipleDependencies::class );
-
-		$this->assertInstanceOf( ClassWithMultipleDependencies::class, $instance );
-		$this->assertInstanceOf( SimpleClass::class, $instance->get_first() );
-		$this->assertInstanceOf( ClassWithDependency::class, $instance->get_second() );
-	}
-
+	/**
+	 * GIVEN multiple services with shared dependencies
+	 * WHEN services are resolved from the container
+	 * THEN shared dependencies are singletons and injected as the same instance
+	 */
 	public function test_autowires_shared_dependencies_as_singletons(): void {
 		$instance1 = $this->container->get( ClassWithDependency::class );
 		$instance2 = $this->container->get( ClassWithMultipleDependencies::class );
@@ -108,23 +167,11 @@ class ContainerTest extends TestCase {
 		);
 	}
 
-	public function test_autowires_class_with_optional_dependency(): void {
-		$instance = $this->container->get( ClassWithOptionalDependency::class );
-
-		$this->assertInstanceOf( ClassWithOptionalDependency::class, $instance );
-		// Optional dependency should still be resolved
-		$this->assertTrue( $instance->has_dependency() );
-		$this->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
-	}
-
-	public function test_autowires_class_with_default_values(): void {
-		$instance = $this->container->get( ClassWithDefaultValue::class );
-
-		$this->assertInstanceOf( ClassWithDefaultValue::class, $instance );
-		$this->assertEquals( 'default', $instance->get_name() );
-		$this->assertEquals( 10, $instance->get_count() );
-	}
-
+	/**
+	 * GIVEN a class with nullable type-hinted parameter
+	 * WHEN the parameter type cannot be resolved
+	 * THEN the container injects null instead of throwing exception
+	 */
 	public function test_autowires_class_with_nullable_unresolvable_dependency(): void {
 		// ClassWithNullableParameter has a nullable LoggerInterface parameter
 		// Since LoggerInterface is not bound, it should resolve to null
@@ -139,6 +186,11 @@ class ContainerTest extends TestCase {
 	// Interface Binding Tests
 	// ========================================
 
+	/**
+	 * GIVEN an interface bound to a concrete implementation
+	 * WHEN the interface is resolved
+	 * THEN the container returns an instance of the bound implementation
+	 */
 	public function test_can_bind_interface_to_implementation(): void {
 		$this->container->bind( LoggerInterface::class, fn() => new ArrayLogger() );
 
@@ -148,6 +200,11 @@ class ContainerTest extends TestCase {
 		$this->assertInstanceOf( ArrayLogger::class, $logger );
 	}
 
+	/**
+	 * GIVEN an interface bound to an implementation
+	 * WHEN a class with interface dependency is autowired
+	 * THEN the bound implementation is injected and works correctly
+	 */
 	public function test_resolves_interface_dependencies(): void {
 		$this->container->bind( LoggerInterface::class, fn() => new ArrayLogger() );
 
@@ -167,30 +224,63 @@ class ContainerTest extends TestCase {
 	// PSR-11 Compliance Tests
 	// ========================================
 
-	public function test_has_returns_true_for_bound_service(): void {
-		$this->container->bind( SimpleClass::class );
+	/**
+	 * GIVEN a container in various states
+	 * WHEN has() is called with a service identifier
+	 * THEN it returns true if the service can be resolved, false otherwise
+	 *
+	 * @dataProvider psr11_has_scenarios_provider
+	 */
+	public function test_psr11_has_method_reports_service_availability(
+		?callable $setup,
+		string $service_id,
+		bool $expected_result
+	): void {
+		if ( $setup ) {
+			$setup( $this->container );
+		}
 
-		$this->assertTrue( $this->container->has( SimpleClass::class ) );
+		$this->assertEquals( $expected_result, $this->container->has( $service_id ) );
 	}
 
-	public function test_has_returns_true_for_existing_class(): void {
-		$this->assertTrue( $this->container->has( SimpleClass::class ) );
-	}
-
-	public function test_has_returns_false_for_non_existent_class(): void {
-		$this->assertFalse( $this->container->has( 'NonExistentClass' ) );
-	}
-
-	public function test_has_returns_true_for_resolved_instance(): void {
-		$this->container->get( SimpleClass::class );
-
-		$this->assertTrue( $this->container->has( SimpleClass::class ) );
+	public function psr11_has_scenarios_provider(): array {
+		return array(
+			'explicitly bound service' => array(
+				function ( $container ) {
+					$container->bind( SimpleClass::class );
+				},
+				SimpleClass::class,
+				true,
+			),
+			'existing autoloadable class' => array(
+				null,
+				SimpleClass::class,
+				true,
+			),
+			'non-existent class' => array(
+				null,
+				'NonExistentClass',
+				false,
+			),
+			'already resolved instance' => array(
+				function ( $container ) {
+					$container->get( SimpleClass::class );
+				},
+				SimpleClass::class,
+				true,
+			),
+		);
 	}
 
 	// ========================================
 	// Configuration Tests
 	// ========================================
 
+	/**
+	 * GIVEN a configuration array with service bindings
+	 * WHEN the configuration is loaded into the container
+	 * THEN all services are registered and resolvable
+	 */
 	public function test_can_load_config_array(): void {
 		$config = array(
 			LoggerInterface::class => fn() => new ArrayLogger(),
@@ -206,6 +296,11 @@ class ContainerTest extends TestCase {
 		$this->assertInstanceOf( ArrayLogger::class, $logger );
 	}
 
+	/**
+	 * GIVEN an array of discovered class names
+	 * WHEN load_compiled() is called with the class list
+	 * THEN all classes are registered and autowirable
+	 */
 	public function test_can_load_compiled_classes(): void {
 		$classes = array(
 			SimpleClass::class,
@@ -226,6 +321,11 @@ class ContainerTest extends TestCase {
 		$this->assertInstanceOf( ClassWithDependency::class, $withDep );
 	}
 
+	/**
+	 * GIVEN a container with explicit custom bindings
+	 * WHEN compiled classes are loaded that include already-bound services
+	 * THEN custom bindings take precedence and are not overridden
+	 */
 	public function test_load_compiled_does_not_override_existing_bindings(): void {
 		// Bind with custom factory first
 		$customInstance = new SimpleClass();
@@ -239,6 +339,11 @@ class ContainerTest extends TestCase {
 		$this->assertSame( $customInstance, $retrieved );
 	}
 
+	/**
+	 * GIVEN a production environment with a cached container file
+	 * WHEN the container is initialized
+	 * THEN it loads services from cache instead of performing discovery
+	 */
 	public function test_initialize_loads_cache_in_production_environment(): void {
 		// Create a temporary directory structure
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_prod_' . uniqid();
@@ -273,6 +378,11 @@ class ContainerTest extends TestCase {
 		}
 	}
 
+	/**
+	 * GIVEN a wpdi-config.php file exists in the base directory
+	 * WHEN the container is initialized
+	 * THEN configuration bindings are loaded and available
+	 */
 	public function test_initialize_with_config_file(): void {
 		// Create a temporary directory structure
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_config_' . uniqid();
@@ -305,6 +415,11 @@ class ContainerTest extends TestCase {
 		rmdir( $temp_dir );
 	}
 
+	/**
+	 * GIVEN a directory with discoverable PHP classes in src/
+	 * WHEN the container is initialized
+	 * THEN classes are discovered, bound, and a cache file is created
+	 */
 	public function test_initialize_discovers_and_binds_classes(): void {
 		// Use a temporary directory with an /src subdirectory
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_bind_' . uniqid();
@@ -358,63 +473,90 @@ PHP;
 	// Exception Tests
 	// ========================================
 
-	public function test_throws_exception_for_invalid_abstract_in_bind(): void {
-		$this->expectException( Container_Exception::class );
-		$this->expectExceptionMessage( "'InvalidClass' must be a valid class or interface name" );
+	/**
+	 * GIVEN invalid service identifiers or unresolvable dependencies
+	 * WHEN the container attempts to bind or resolve them
+	 * THEN appropriate exceptions are thrown with descriptive messages
+	 *
+	 * @dataProvider exception_scenarios_provider
+	 */
+	public function test_throws_appropriate_exceptions(
+		string $exception_class,
+		?string $message_contains,
+		callable $action
+	): void {
+		$this->expectException( $exception_class );
+		if ( $message_contains ) {
+			$this->expectExceptionMessage( $message_contains );
+		}
 
-		$this->container->bind( 'InvalidClass' );
+		$action( $this->container );
+	}
+
+	public function exception_scenarios_provider(): array {
+		return array(
+			'invalid class name in bind' => array(
+				Container_Exception::class,
+				"'InvalidClass' must be a valid class or interface name",
+				function ( $container ) {
+					$container->bind( 'InvalidClass' );
+				},
+			),
+			'invalid class name in get' => array(
+				Not_Found_Exception::class,
+				"'invalid-string' must be a valid class or interface name",
+				function ( $container ) {
+					$container->get( 'invalid-string' );
+				},
+			),
+			'abstract class cannot be instantiated' => array(
+				Container_Exception::class,
+				'is not instantiable',
+				function ( $container ) {
+					$container->get( AbstractClass::class );
+				},
+			),
+			'unbound interface in dependency chain' => array(
+				Container_Exception::class,
+				null,
+				function ( $container ) {
+					$container->get( ClassWithInterface::class );
+				},
+			),
+			'interface without binding' => array(
+				Not_Found_Exception::class,
+				'Service ' . LoggerInterface::class . ' not found',
+				function ( $container ) {
+					$container->get( LoggerInterface::class );
+				},
+			),
+			'unresolvable primitive parameter' => array(
+				Container_Exception::class,
+				'Cannot resolve parameter',
+				function ( $container ) {
+					$class = new class( 'test' ) {
+						public function __construct( string $required ) {
+						}
+					};
+					$container->get( get_class( $class ) );
+				},
+			),
+		);
 	}
 
 	// Note: test_throws_exception_for_non_callable_factory removed
 	// The ?callable type hint makes it impossible to pass non-callable values,
 	// so there's no code path to test. PHP's type system handles this.
 
-	public function test_throws_exception_for_invalid_class_in_get(): void {
-		$this->expectException( Not_Found_Exception::class );
-		$this->expectExceptionMessage( "'invalid-string' must be a valid class or interface name" );
-
-		$this->container->get( 'invalid-string' );
-	}
-
-	public function test_throws_exception_for_abstract_class(): void {
-		$this->expectException( Container_Exception::class );
-		$this->expectExceptionMessage( 'is not instantiable' );
-
-		$this->container->get( AbstractClass::class );
-	}
-
-	public function test_throws_exception_for_unbound_interface(): void {
-		$this->expectException( Container_Exception::class );
-
-		$this->container->get( ClassWithInterface::class );
-	}
-
-	public function test_throws_not_found_exception_for_interface_without_binding(): void {
-		$this->expectException( Not_Found_Exception::class );
-		$this->expectExceptionMessage( 'Service ' . LoggerInterface::class . ' not found' );
-
-		// Try to get an interface that has no binding and can't be autowired
-		$this->container->get( LoggerInterface::class );
-	}
-
-	public function test_throws_exception_when_cannot_resolve_parameter(): void {
-		// Create a class that requires a primitive type we can't resolve
-		$this->expectException( Container_Exception::class );
-		$this->expectExceptionMessage( 'Cannot resolve parameter' );
-
-		// We'll test with a class requiring a string parameter
-		$class = new class( 'test' ) {
-			public function __construct( string $required ) {
-			}
-		};
-
-		$this->container->get( get_class( $class ) );
-	}
-
 	// ========================================
 	// Utility Method Tests
 	// ========================================
 
+	/**
+	 * GIVEN a container with multiple bound services
+	 * WHEN get_registered() is called
+	 * THEN it returns an array of all registered service identifiers
+	 */
 	public function test_get_registered_returns_bound_services(): void {
 		$this->container->bind( SimpleClass::class );
 		$this->container->bind( LoggerInterface::class, fn() => new ArrayLogger() );
@@ -426,6 +568,11 @@ PHP;
 		$this->assertCount( 2, $registered );
 	}
 
+	/**
+	 * GIVEN a container with bindings and resolved instances
+	 * WHEN clear() is called
+	 * THEN all bindings and instances are removed but autowiring still works
+	 */
 	public function test_clear_removes_all_bindings_and_instances(): void {
 		$this->container->bind( SimpleClass::class );
 		$this->container->get( SimpleClass::class );
@@ -445,6 +592,11 @@ PHP;
 	// Edge Cases
 	// ========================================
 
+	/**
+	 * GIVEN classes with circular constructor dependencies
+	 * WHEN the container attempts to resolve them
+	 * THEN a Circular_Dependency_Exception is thrown with a clear error message
+	 */
 	public function test_circular_dependency_handling(): void {
 		$this->expectException( Circular_Dependency_Exception::class );
 		$this->expectExceptionMessage( 'Circular dependency detected' );
@@ -453,6 +605,11 @@ PHP;
 		$this->container->get( CircularA::class );
 	}
 
+	/**
+	 * GIVEN a service already bound in the container
+	 * WHEN the binding is cleared and re-bound with a different factory
+	 * THEN the new factory is used for subsequent resolutions
+	 */
 	public function test_can_override_binding(): void {
 		$this->container->bind( SimpleClass::class, fn() => new SimpleClass() );
 
