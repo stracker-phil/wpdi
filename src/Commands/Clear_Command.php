@@ -29,7 +29,7 @@ class Clear_Command {
 		$cache_file = $path . '/cache/wpdi-container.php';
 
 		if ( file_exists( $cache_file ) ) {
-			if ( unlink( $cache_file ) ) {
+			if ( @unlink( $cache_file ) ) {
 				WP_CLI::success( "Cache cleared: {$cache_file}" );
 			} else {
 				WP_CLI::error( "Failed to delete cache file: {$cache_file}" );
@@ -41,7 +41,7 @@ class Clear_Command {
 		// Clear entire cache directory if empty
 		$cache_dir = dirname( $cache_file );
 		if ( is_dir( $cache_dir ) && 2 === count( scandir( $cache_dir ) ) ) { // Only . and ..
-			if ( rmdir( $cache_dir ) ) {
+			if ( @rmdir( $cache_dir ) ) {
 				WP_CLI::success( 'Removed empty cache directory' );
 			}
 		}

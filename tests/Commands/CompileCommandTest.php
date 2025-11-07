@@ -310,6 +310,67 @@ PHP;
 	}
 
 	/**
+	 * GIVEN cache directory is not writable
+	 * WHEN attempting to compile
+	 * THEN should show error about compilation failure
+	 *
+	 * Note: Uses 0555 (r-xr-xr-x) permissions which prevents write
+	 * but allows directory traversal. The test uses @ to suppress
+	 * PHP warnings from file_put_contents when testing the failure path.
+	 */
+	public function test_shows_error_when_compilation_fails(): void {
+		// Create test class
+		$this->createTestClass( 'Test_Service' );
+
+		// Create cache directory but make it read-only
+		// Use 0555 (r-xr-xr-x) not 0444 - need execute bit for directory access
+		$cache_dir = $this->temp_dir . '/cache';
+		mkdir( $cache_dir );
+		chmod( $cache_dir, 0555 );
+
+		// Test if we can actually prevent writing on this system
+		$test_file = $cache_dir . '/test-write.txt';
+		$test_result = @file_put_contents( $test_file, 'test' );
+
+		if ( false !== $test_result ) {
+			// File was writable despite permissions - restore and skip test
+			chmod( $cache_dir, 0777 );
+			@unlink( $test_file );
+			// Add assertion count to indicate we verified the precondition
+			$this->addToAssertionCount( 1 );
+			$this->markTestSkipped( 'Filesystem permissions cannot prevent file writes on this system' );
+			return;
+		}
+
+		$command = new Compile_Command();
+
+		// WP_CLI::error() throws exception
+		$this->expectException( 'WP_CLI_Exception' );
+
+		try {
+			// Suppress file_put_contents warning since we're testing the failure path
+			@$command->__invoke(
+				array(),
+				array( 'path' => $this->temp_dir )
+			);
+		} catch ( WP_CLI_Exception $e ) {
+			// Verify error was called
+			$error_calls = $this->getWpCliCalls( 'error' );
+			$this->assertCount( 1, $error_calls );
+			$this->assertStringContainsString( 'Failed to compile', $error_calls[0]['args'][0] );
+
+			// Restore permissions before cleanup
+			chmod( $cache_dir, 0777 );
+
+			// Re-throw to satisfy expectException
+			throw $e;
+		} finally {
+			// Ensure permissions are restored even if test fails
+			@chmod( $cache_dir, 0777 );
+		}
+	}
+
+	/**
 	 * Recursively delete directory
 	 */
 	private function recursiveDelete( string $dir ): void {
