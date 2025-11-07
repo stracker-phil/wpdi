@@ -100,8 +100,8 @@ class ClearCommandTest extends TestCase {
 	 * WHEN clearing cache
 	 * THEN should show error
 	 *
-	 * Note: This test is skipped on systems where filesystem permissions
-	 * don't prevent file deletion by the owner (e.g., macOS).
+	 * Note: Uses 0555 (r-xr-xr-x) permissions which prevents write/delete
+	 * but allows directory traversal (required for file_exists() to work).
 	 */
 	public function test_shows_error_when_cache_deletion_fails(): void {
 		// Create cache file
@@ -111,7 +111,8 @@ class ClearCommandTest extends TestCase {
 		file_put_contents( $cache_file, '<?php return array();' );
 
 		// Make directory read-only to prevent file deletion
-		chmod( $cache_dir, 0444 );
+		// Use 0555 (r-xr-xr-x) not 0444 - need execute bit for file_exists()
+		chmod( $cache_dir, 0555 );
 
 		// Test if we can actually prevent deletion on this system
 		$test_result = @unlink( $cache_file );
@@ -119,8 +120,9 @@ class ClearCommandTest extends TestCase {
 		if ( $test_result || ! file_exists( $cache_file ) ) {
 			// File was deletable despite permissions - restore and skip test
 			chmod( $cache_dir, 0777 );
+			// Add assertion count to indicate we verified the precondition
+			$this->addToAssertionCount( 1 );
 			$this->markTestSkipped( 'Filesystem permissions cannot prevent file deletion on this system' );
-			return;
 		}
 
 		// File still exists and couldn't be deleted - this system supports the test
