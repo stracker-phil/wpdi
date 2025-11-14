@@ -50,6 +50,50 @@ return array(
 );
 ```
 
+## Design Philosophy: Keep Configuration Minimal
+
+WPDI's configuration is **intentionally limited** to encourage clean architecture. Factory functions in `wpdi-config.php` receive **no arguments** - they cannot access the container or resolve dependencies.
+
+### Why This Limitation Exists
+
+**Prevents Service Locator Anti-Pattern:**
+If factories had container access, developers would be tempted to resolve dependencies manually:
+
+```php
+// ❌ BAD: Service Locator anti-pattern (not possible with WPDI)
+'Payment_Service' => function( $container ) {
+    $gateway = $container->get( 'Payment_Gateway' );
+    $logger = $container->get( 'Logger' );
+    return new Payment_Service( $gateway, $logger );
+}
+```
+
+**Encourages Constructor Injection:**
+Instead, WPDI forces you to use proper dependency injection via constructors:
+
+```php
+// ✅ GOOD: Constructor injection (no config needed!)
+class Payment_Service {
+    public function __construct(
+        Payment_Gateway $gateway,
+        Logger $logger
+    ) {
+        $this->gateway = $gateway;
+        $this->logger = $logger;
+    }
+}
+```
+
+WPDI automatically discovers `Payment_Service` and autowires its dependencies - **no configuration needed!**
+
+### What Belongs in wpdi-config.php
+
+The configuration file should **only contain interface bindings** - telling WPDI which concrete implementation to use for an interface.
+
+**Keep it minimal** - if a class can be autowired, don't configure it! The vast majority of your services should use autowiring with zero configuration.
+
+Ideally, treat any other conditional logic (environment-based selection, feature flags, etc.) as **business logic** and handle it in a ServiceProvider class, not on the DI level.
+
 ## Configuration Patterns
 
 ### Interface Bindings
@@ -95,21 +139,23 @@ return array(
 );
 ```
 
-### Environment-Based Configuration
+### Environment-Based Selection (Reference Only)
+
+**Note**: While WPDI supports this pattern, environment-based selection is business logic and should typically be handled in a ServiceProvider class rather than in the DI configuration. This example is shown for reference.
 
 ```php
 <?php
 return array(
     'API_Client_Interface' => function() {
         $environment = wp_get_environment_type();
-        
+
         switch ( $environment ) {
             case 'production':
-                return new Live_API_Client( get_option( 'api_live_key' ) );
-                
+                return new Live_API_Client();
+
             case 'staging':
-                return new Staging_API_Client( get_option( 'api_staging_key' ) );
-                
+                return new Staging_API_Client();
+
             default:
                 return new Mock_API_Client();
         }
@@ -181,37 +227,42 @@ class Plugin_Settings {
 - Follows WordPress coding standards (classes encapsulate their option dependencies)
 - Other plugins can use hooks to modify or observe the option access
 
-### Complex Factory Logic
+### Conditional Implementation Selection (Reference Only)
+
+**Note**: While WPDI supports this pattern, conditional selection based on options or feature flags is business logic and should typically be handled in a ServiceProvider class rather than in the DI configuration. These examples are shown for reference.
 
 ```php
 <?php
 return array(
-    'Payment_Gateway_Factory' => function() {
-        return new Payment_Gateway_Factory(
-            array(
-                'paypal'  => PayPal_Gateway::class,
-                'stripe'  => Stripe_Gateway::class,
-                'square'  => Square_Gateway::class,
-            )
-        );
-    },
-    
-    'Email_Service' => function() {
+    // Choose implementation based on WordPress options
+    'Email_Service_Interface' => function() {
         $settings = get_option( 'email_settings', array() );
-        
-        if ( ! empty( $settings['smtp_host'] ) ) {
-            return new SMTP_Email_Service(
-                $settings['smtp_host'],
-                $settings['smtp_port'],
-                $settings['smtp_username'],
-                $settings['smtp_password']
-            );
+
+        // Select which class to instantiate (option values fetched inside the class)
+        if ( ! empty( $settings['smtp_enabled'] ) ) {
+            return new SMTP_Email_Service(); // Fetches SMTP settings internally
         }
-        
+
         return new WP_Mail_Service();
+    },
+
+    // Choose implementation based on feature flags
+    'Payment_Gateway_Interface' => function() {
+        $gateway = get_option( 'active_payment_gateway', 'stripe' );
+
+        switch ( $gateway ) {
+            case 'paypal':
+                return new PayPal_Gateway();
+            case 'square':
+                return new Square_Gateway();
+            default:
+                return new Stripe_Gateway();
+        }
     },
 );
 ```
+
+**Important**: If you use `get_option()` in factories, use it only to **choose which class** to instantiate, not to pass configuration values. The selected class should fetch its own configuration internally.
 
 ## Configuration Best Practices
 
@@ -220,22 +271,18 @@ return array(
 ```php
 <?php
 return array(
-    // WordPress services handle get_option() internally
-    'My_Config' => function() {
-        return new My_Config(); // Class calls get_option() in methods
+    // Interface binding - simple implementation selection
+    'Cache_Interface' => function() {
+        return new Redis_Cache();
     },
 
-    // Environment-specific logic in factory
-    'My_Service' => function() {
-        return WP_DEBUG ? new Debug_Service() : new Production_Service();
+    // Interface binding - another implementation
+    'Logger_Interface' => function() {
+        return new WP_Logger();
     },
 
-    // Interface bindings can use constructor parameters for config
-    'API_Client_Interface' => function() {
-        // Choose one of two implementations
-        $is_live = defined('PLUGIN_LIVE_MODE') && PLUGIN_LIVE_MODE;
-        return $is_live ? new Live_API_Client() : new Sandbox_API_Client();
-    },
+    // That's it! Keep wpdi-config.php minimal.
+    // Concrete classes with dependencies? Use autowiring - no config needed!
 );
 ```
 
@@ -252,6 +299,12 @@ return array(
         return new Bad_Settings( get_option('setting') ); // ❌ Cached at instantiation!
     },
 
+    // Don't manually create dependencies (use autowiring!)
+    'Bad_Service' => function() {
+        $dependency = new Some_Dependency(); // ❌ Bypasses container, not a singleton!
+        return new Bad_Service( $dependency );
+    },
+
     // Don't return scalars
     'bad_setting' => function() {
         return get_option( 'setting' ); // ❌ DI is for objects, not values!
@@ -263,6 +316,8 @@ return array(
     },
 );
 ```
+
+**Remember**: If you need to inject dependencies into a service, use constructor injection and let autowiring handle it. Don't manually create dependencies in factories!
 
 ## Loading Configuration
 

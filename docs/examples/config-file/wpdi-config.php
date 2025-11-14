@@ -2,33 +2,33 @@
 /**
  * WPDI Configuration
  *
- * This file contains interface bindings and WordPress-specific factories.
- * Concrete classes are auto-discovered and don't need configuration.
+ * Factory functions receive NO ARGUMENTS - they cannot access the container.
+ * Only configure INTERFACE BINDINGS here.
+ * Concrete classes are auto-discovered and autowired - keep this file minimal!
  */
 
 return array(
-	// Interface bindings - these need manual configuration
+	/**
+	 * Interface binding: Bind interface to concrete implementation
+	 */
 	PaymentClientInterface::class => function () {
-		// Environment is static during one request (intentional).
-		$environment = get_option( 'payment_environment', 'sandbox' );
-
-		return 'live' === $environment
-			? new PayPal_Live_Client()
-			: new PayPal_Sandbox_Client();
+		return new PayPal_Client();
 	},
 
-	LoggerInterface::class => function () {
-		// Log level does not change for the rest of this request (intentional).
-		$log_level = get_option( 'payment_log_level', 'info' );
-
-		return new WP_Logger( $log_level );
+	/**
+	 * Interface binding: Bind interface to concrete implementation
+	 */
+	LoggerInterface::class        => function () {
+		return new WP_Logger();
 	},
 
-	Payment_Settings::class => function () {
-		return new Payment_Settings();
-	},
-
-	Payment_Config::class   => function () {
-		return new Payment_Config();
-	},
+	/**
+	 * That's it! Keep this file minimal.
+	 *
+	 * Concrete classes (Payment_Settings, Payment_Config, etc.) are auto-discovered
+	 * and autowired automatically - no configuration needed!
+	 *
+	 * Need conditional logic? Create a ServiceProvider class instead of
+	 * adding business logic to this configuration file.
+	 */
 );

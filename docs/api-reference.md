@@ -220,25 +220,24 @@ function(): object {
 ```php
 <?php
 return array(
-    // Simple factory
+    // Interface binding - tell WPDI which implementation to use
     'Logger_Interface' => function() {
         return new WP_Logger();
     },
-    
-    // Factory with dependencies
-    'Complex_Service' => function() {
-        $dependency = new Dependency();
-        return new Complex_Service( $dependency );
+
+    // Interface binding - another example
+    'Cache_Interface' => function() {
+        return new Redis_Cache();
     },
-    
-    // WordPress integration
-    'Settings_Service' => function() {
-        return new Settings_Service(
-            get_option( 'my_setting', 'default' )
-        );
+
+    // Interface binding - simple and straightforward
+    'API_Client_Interface' => function() {
+        return new Live_Client();
     },
 );
 ```
+
+**Note**: Factories receive **no arguments** (no container access). For services with dependencies, use constructor injection and let autowiring handle it automatically. Keep `wpdi-config.php` minimal - only interface bindings!
 
 ## Auto-Discovery Rules
 
