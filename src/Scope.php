@@ -17,7 +17,7 @@ abstract class Scope {
 	 */
 	public function __construct( string $scope_file ) {
 		$this->container = new Container();
-		$this->container->initialize( dirname( $scope_file ) );
+		$this->container->initialize( $scope_file );
 		$this->bootstrap();
 	}
 

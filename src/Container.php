@@ -107,9 +107,10 @@ class Container implements ContainerInterface {
 	/**
 	 * Initialize container with auto-discovery
 	 *
-	 * @param string $base_path Plugin/theme base directory
+	 * @param string $scope_file Path to the Scope implementation file (e.g., __FILE__)
 	 */
-	public function initialize( string $base_path ): void {
+	public function initialize( string $scope_file ): void {
+		$base_path   = dirname( $scope_file );
 		$cache_file  = $base_path . '/cache/wpdi-container.php';
 		$config_file = $base_path . '/wpdi-config.php';
 
@@ -122,7 +123,7 @@ class Container implements ContainerInterface {
 
 		// On non-production environment we check cache-staleness on every request
 		if ( $not_production ) {
-			$this->delete_stale_cache( $cache_file );
+			$this->delete_stale_cache( $cache_file, $scope_file );
 		}
 
 		// Load cached services if a cache file exists
@@ -266,20 +267,26 @@ class Container implements ContainerInterface {
 	}
 
 	/**
-	 * Delete cache file if it's stale (any cached file modified)
+	 * Delete cache file if it's stale (scope file or any cached file modified)
 	 *
-	 * Only checks files that were cached - if you modify an existing file
-	 * to inject a new class, that modification triggers cache rebuild.
-	 * New files without modifications to existing files require manual
-	 * cache clear (acceptable tradeoff for performance).
+	 * Checks the Scope implementation file first (catches bootstrap() changes),
+	 * then checks cached class files. This handles both:
+	 * - Adding new dependencies in bootstrap() without modifying src/ files
+	 * - Modifying existing src/ files (which triggers cache rebuild)
 	 */
-	private function delete_stale_cache( string $cache_file ): void {
+	private function delete_stale_cache( string $cache_file, string $scope_file ): void {
 		// No cache to check
 		if ( ! file_exists( $cache_file ) ) {
 			return;
 		}
 
 		$cache_time = filemtime( $cache_file );
+
+		// Check Scope implementation file first
+		if ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time ) {
+			@unlink( $cache_file );
+			return;
+		}
 
 		// Load cached class => filepath mapping
 		$cached_files = require $cache_file;
@@ -290,7 +297,7 @@ class Container implements ContainerInterface {
 			return;
 		}
 
-		// Check if any cached file was modified
+		// Check if any cached class file was modified
 		foreach ( $cached_files as $file_path ) {
 			// File deleted? Cache is stale
 			if ( ! file_exists( $file_path ) ) {
