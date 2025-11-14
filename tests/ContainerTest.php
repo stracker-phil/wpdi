@@ -302,12 +302,13 @@ class ContainerTest extends TestCase {
 	 * THEN all classes are registered and autowirable
 	 */
 	public function test_can_load_compiled_classes(): void {
-		$classes = array(
-			SimpleClass::class,
-			ClassWithDependency::class,
+		// load_compiled expects class => filepath mapping
+		$class_map = array(
+			SimpleClass::class        => '/fake/path/SimpleClass.php',
+			ClassWithDependency::class => '/fake/path/ClassWithDependency.php',
 		);
 
-		$this->container->load_compiled( $classes );
+		$this->container->load_compiled( $class_map );
 
 		// Classes should be registered
 		$this->assertTrue( $this->container->has( SimpleClass::class ) );
@@ -331,8 +332,8 @@ class ContainerTest extends TestCase {
 		$customInstance = new SimpleClass();
 		$this->container->bind( SimpleClass::class, fn() => $customInstance );
 
-		// Load compiled classes including SimpleClass
-		$this->container->load_compiled( array( SimpleClass::class ) );
+		// Load compiled classes including SimpleClass (expects class => filepath mapping)
+		$this->container->load_compiled( array( SimpleClass::class => '/fake/path/SimpleClass.php' ) );
 
 		// Should still return the custom instance, not autowired
 		$retrieved = $this->container->get( SimpleClass::class );
@@ -394,7 +395,11 @@ class ContainerTest extends TestCase {
 		$config_content = "<?php\nreturn array(\n    '" . LoggerInterface::class . "' => function() {\n        return new " . ArrayLogger::class . "();\n    },\n);";
 		file_put_contents( $config_file, $config_content );
 
-		$this->container->initialize( $temp_dir );
+		// Create a fake scope file (initialize expects __FILE__ path)
+		$scope_file = $temp_dir . '/test-scope.php';
+		file_put_contents( $scope_file, "<?php\n// Fake scope file for testing" );
+
+		$this->container->initialize( $scope_file );
 
 		// Should have loaded the interface binding from config
 		$this->assertTrue( $this->container->has( LoggerInterface::class ) );
@@ -403,6 +408,7 @@ class ContainerTest extends TestCase {
 
 		// Cleanup
 		unlink( $config_file );
+		unlink( $scope_file );
 		rmdir( $temp_dir . '/src' );
 		// Cache directory might have been created
 		if ( is_dir( $temp_dir . '/cache' ) ) {
@@ -446,8 +452,12 @@ PHP;
 		// Create a fresh container to ensure no pre-existing bindings
 		$container = new Container();
 
+		// Create a fake scope file (initialize expects __FILE__ path)
+		$scope_file = $temp_dir . '/test-scope.php';
+		file_put_contents( $scope_file, "<?php\n// Fake scope file for testing" );
+
 		// Initialize - this should discover and bind DiscoverableTestClass (line 130)
-		$container->initialize( $temp_dir );
+		$container->initialize( $scope_file );
 
 		// DiscoverableTestClass should have been discovered and bound (line 130)
 		$this->assertTrue( $container->has( 'WPDI\Tests\Discovery\DiscoverableTestClass' ) );
@@ -464,6 +474,7 @@ PHP;
 		// Cleanup
 		unlink( $cache_file );
 		unlink( $dest_class );
+		unlink( $scope_file );
 		rmdir( $temp_dir . '/cache' );
 		rmdir( $temp_dir . '/src' );
 		rmdir( $temp_dir );

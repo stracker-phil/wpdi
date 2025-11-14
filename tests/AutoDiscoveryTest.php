@@ -50,7 +50,8 @@ class AutoDiscoveryTest extends TestCase {
 	 * THEN only concrete instantiable classes are included in the result
 	 */
 	public function test_discovers_concrete_classes_only(): void {
-		$classes = $this->discovery->discover( $this->fixtures_path );
+		$class_map = $this->discovery->discover( $this->fixtures_path );
+		$classes   = array_keys( $class_map );
 
 		// Should include concrete classes
 		$this->assertContains( SimpleClass::class, $classes );
@@ -70,9 +71,9 @@ class AutoDiscoveryTest extends TestCase {
 	 * THEN all are fully-qualified strings that exist and start with expected namespace
 	 */
 	public function test_returns_fully_qualified_class_names(): void {
-		$classes = $this->discovery->discover( $this->fixtures_path );
+		$class_map = $this->discovery->discover( $this->fixtures_path );
 
-		foreach ( $classes as $class ) {
+		foreach ( $class_map as $class => $file_path ) {
 			$this->assertIsString( $class );
 			$this->assertTrue( class_exists( $class ), "Class {$class} should exist" );
 			$this->assertStringStartsWith( 'WPDI\\Tests\\Fixtures\\', $class );
@@ -85,9 +86,9 @@ class AutoDiscoveryTest extends TestCase {
 	 * THEN all classes are instantiable (not abstract, not interface)
 	 */
 	public function test_all_discovered_classes_are_instantiable(): void {
-		$classes = $this->discovery->discover( $this->fixtures_path );
+		$class_map = $this->discovery->discover( $this->fixtures_path );
 
-		foreach ( $classes as $class ) {
+		foreach ( $class_map as $class => $file_path ) {
 			$reflection = new ReflectionClass( $class );
 			$this->assertTrue(
 				$reflection->isInstantiable(),
@@ -206,26 +207,28 @@ class AutoDiscoveryTest extends TestCase {
 		$method     = $reflection->getMethod( 'filter_concrete_classes' );
 		$method->setAccessible( true );
 
-		$classes = array(
-			SimpleClass::class,    // Concrete - should be included
-			AbstractClass::class,  // Abstract - should be excluded
-			LoggerInterface::class, // Interface - should be excluded
-			'NonExistent',         // Doesn't exist - skipped
-			'stdClass',            // Internal class - instantiable, included
-			'ArrayObject',         // SPL class - instantiable, included
-			'DateTime',            // Date/time class - instantiable, included
+		// filter_concrete_classes now expects class => filepath mapping
+		$class_map = array(
+			SimpleClass::class    => '/fake/path/SimpleClass.php',    // Concrete - should be included
+			AbstractClass::class  => '/fake/path/AbstractClass.php',  // Abstract - should be excluded
+			LoggerInterface::class => '/fake/path/LoggerInterface.php', // Interface - should be excluded
+			'NonExistent'         => '/fake/path/NonExistent.php',    // Doesn't exist - skipped
+			'stdClass'            => '/fake/path/stdClass.php',       // Internal class - instantiable, included
+			'ArrayObject'         => '/fake/path/ArrayObject.php',    // SPL class - instantiable, included
+			'DateTime'            => '/fake/path/DateTime.php',       // Date/time class - instantiable, included
 		);
 
-		$result = $method->invoke( $discovery, $classes );
+		$result = $method->invoke( $discovery, $class_map );
+		$result_classes = array_keys( $result );
 
 		// Should only include concrete, instantiable classes
-		$this->assertContains( SimpleClass::class, $result );
-		$this->assertContains( 'stdClass', $result );
-		$this->assertContains( 'ArrayObject', $result );
-		$this->assertContains( 'DateTime', $result );
-		$this->assertNotContains( AbstractClass::class, $result );
-		$this->assertNotContains( LoggerInterface::class, $result );
-		$this->assertNotContains( 'NonExistent', $result );
+		$this->assertContains( SimpleClass::class, $result_classes );
+		$this->assertContains( 'stdClass', $result_classes );
+		$this->assertContains( 'ArrayObject', $result_classes );
+		$this->assertContains( 'DateTime', $result_classes );
+		$this->assertNotContains( AbstractClass::class, $result_classes );
+		$this->assertNotContains( LoggerInterface::class, $result_classes );
+		$this->assertNotContains( 'NonExistent', $result_classes );
 
 		// The exception handler (lines 121-123) is defensive code for rare edge cases
 		// that are nearly impossible to trigger without PHP extensions or runtime corruption
@@ -242,10 +245,10 @@ class AutoDiscoveryTest extends TestCase {
 	 * THEN all returned class names are fully-qualified with correct namespace
 	 */
 	public function test_correctly_handles_namespaced_classes(): void {
-		$classes = $this->discovery->discover( $this->fixtures_path );
+		$class_map = $this->discovery->discover( $this->fixtures_path );
 
 		// All classes should have the correct namespace
-		foreach ( $classes as $class ) {
+		foreach ( $class_map as $class => $file_path ) {
 			$this->assertStringStartsWith( 'WPDI\\Tests\\Fixtures\\', $class );
 		}
 	}
@@ -273,9 +276,9 @@ class TestClass {
 		// Load the class
 		require_once $test_file;
 
-		$classes = $this->discovery->discover( $temp_dir );
+		$class_map = $this->discovery->discover( $temp_dir );
 
-		$this->assertContains( 'WPDI\\Tests\\Temp\\TestClass', $classes );
+		$this->assertContains( 'WPDI\\Tests\\Temp\\TestClass', array_keys( $class_map ) );
 
 		// Cleanup
 		unlink( $test_file );

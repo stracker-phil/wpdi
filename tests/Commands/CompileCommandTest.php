@@ -84,7 +84,7 @@ class CompileCommandTest extends TestCase {
 		// Verify cache file contains the class
 		$cache_content = require $cache_file;
 		$this->assertIsArray( $cache_content, 'Cache should return array' );
-		$this->assertContains( 'Test_Service', $cache_content, 'Cache should contain discovered class' );
+		$this->assertContains( 'Test_Service', array_keys( $cache_content ), 'Cache should contain discovered class' );
 
 		// Verify success message was called
 		$success_calls = $this->getWpCliCalls( 'success' );
@@ -280,7 +280,7 @@ PHP;
 
 			// Verify cache content
 			$cache_content = require $cache_file;
-			$this->assertContains( 'Test_Service', $cache_content, 'Cache should contain discovered class' );
+			$this->assertContains( 'Test_Service', array_keys( $cache_content ), 'Cache should contain discovered class' );
 		} finally {
 			chdir( $original_cwd );
 		}
