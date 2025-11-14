@@ -1,78 +1,41 @@
-# Configuration Guide
+# Configuration
 
-WPDI works with zero configuration for concrete classes, but you'll need to configure interfaces and WordPress-specific services.
+WPDI works with zero configuration for concrete classes. You only need `wpdi-config.php` for interface bindings.
 
 ## The wpdi-config.php File
 
-Create a `wpdi-config.php` file in your plugin/theme root directory:
-
-**Traditional syntax** (verbose)
+Create in your plugin/theme root:
 
 ```php
 <?php
-/**
- * WPDI Configuration
- *
- * This file defines interface bindings and WordPress-specific factories.
- * Concrete classes are auto-discovered and don't need configuration.
- */
-
 return array(
-    // Interface bindings
-    'Logger_Interface' => static function() {
-        return new WP_Logger();
-    },
-
-    // WordPress services (use get_option() internally for fresh values)
-    'Sample_Config' => static function() {
-        return new Sample_Config();
-    },
+    Logger_Interface::class => fn() => new WP_Logger(),
+    Cache_Interface::class => fn() => new Redis_Cache(),
 );
 ```
 
-**Modern arrow-function syntax** (supported in php 7.4)
+## Design Philosophy
+
+**Factories receive NO arguments** - they cannot access the container or resolve dependencies.
+
+###Why This Limitation
+
+Prevents the Service Locator anti-pattern:
 
 ```php
-<?php
-/**
- * WPDI Configuration
- *
- * This file defines interface bindings and WordPress-specific factories.
- * Concrete classes are auto-discovered and don't need configuration.
- */
-
-return array(
-    // Interface bindings
-    'Logger_Interface' => static fn() => new WP_Logger(),
-
-    // WordPress services (use get_option() internally for fresh values)
-    'Sample_Config' => static fn() => new Sample_Config(),
-);
-```
-
-## Design Philosophy: Keep Configuration Minimal
-
-WPDI's configuration is **intentionally limited** to encourage clean architecture. Factory functions in `wpdi-config.php` receive **no arguments** - they cannot access the container or resolve dependencies.
-
-### Why This Limitation Exists
-
-**Prevents Service Locator Anti-Pattern:**
-If factories had container access, developers would be tempted to resolve dependencies manually:
-
-```php
-// ❌ BAD: Service Locator anti-pattern (not possible with WPDI)
-'Payment_Service' => function( $container ) {
-    $gateway = $container->get( 'Payment_Gateway' );
-    $logger = $container->get( 'Logger' );
-    return new Payment_Service( $gateway, $logger );
+// ❌ NOT POSSIBLE (and that's good!)
+'Payment_Service' => function($container) {
+    return new Payment_Service(
+        $container->get('Payment_Gateway'),  // Service Locator anti-pattern
+        $container->get('Logger')
+    );
 }
 ```
 
-**Encourages Constructor Injection:**
-Instead, WPDI forces you to use proper dependency injection via constructors:
+Forces proper dependency injection:
 
 ```php
-// ✅ GOOD: Constructor injection (no config needed!)
+// ✅ CORRECT - use constructor injection
 class Payment_Service {
     public function __construct(
         Payment_Gateway $gateway,
@@ -82,248 +45,156 @@ class Payment_Service {
         $this->logger = $logger;
     }
 }
+// No configuration needed - autowired automatically!
 ```
 
-WPDI automatically discovers `Payment_Service` and autowires its dependencies - **no configuration needed!**
+### What Belongs Here
 
-### What Belongs in wpdi-config.php
+**Only interface bindings.** If a class can be autowired, don't configure it.
 
-The configuration file should **only contain interface bindings** - telling WPDI which concrete implementation to use for an interface.
+Conditional logic (environment, feature flags) is business logic - handle it in a ServiceProvider class, not DI configuration.
 
-**Keep it minimal** - if a class can be autowired, don't configure it! The vast majority of your services should use autowiring with zero configuration.
-
-Ideally, treat any other conditional logic (environment-based selection, feature flags, etc.) as **business logic** and handle it in a ServiceProvider class, not on the DI level.
-
-## Configuration Patterns
-
-### Interface Bindings
-
-When you have interfaces, you must tell WPDI which implementation to use:
+## Interface Bindings
 
 ```php
 <?php
-// Interface definition
 interface Cache_Interface {
-    public function get( string $key ): mixed;
-    public function set( string $key, mixed $value, int $ttl = 3600 ): bool;
+    public function get(string $key);
+    public function set(string $key, $value, int $ttl = 3600): bool;
 }
 
-// Implementations
-class WP_Object_Cache implements Cache_Interface {
-    public function get( string $key ): mixed {
-        return wp_cache_get( $key );
-    }
-    
-    public function set( string $key, mixed $value, int $ttl = 3600 ): bool {
-        return wp_cache_set( $key, $value, '', $ttl );
-    }
+class Redis_Cache implements Cache_Interface {
+    // Implementation
 }
 
-class File_Cache implements Cache_Interface {
-    // File-based cache implementation
-}
-```
-
-```php
-<?php
 // wpdi-config.php
 return array(
-    'Cache_Interface' => function() {
-        // Choose implementation based on environment
-        if ( function_exists( 'wp_cache_get' ) && wp_using_ext_object_cache() ) {
-            return new WP_Object_Cache();
-        }
-        
-        return new File_Cache();
-    },
+    Cache_Interface::class => fn() => new Redis_Cache(),
 );
 ```
 
-### Environment-Based Selection (Reference Only)
+Now any service depending on `Cache_Interface` gets `Redis_Cache` injected automatically.
 
-**Note**: While WPDI supports this pattern, environment-based selection is business logic and should typically be handled in a ServiceProvider class rather than in the DI configuration. This example is shown for reference.
+## WordPress Option Pattern
 
-```php
-<?php
-return array(
-    'API_Client_Interface' => function() {
-        $environment = wp_get_environment_type();
+**CRITICAL:** Services are singletons - factories run once and instances are cached.
 
-        switch ( $environment ) {
-            case 'production':
-                return new Live_API_Client();
-
-            case 'staging':
-                return new Staging_API_Client();
-
-            default:
-                return new Mock_API_Client();
-        }
-    },
-);
-```
-
-### WordPress Option Integration
-
-**IMPORTANT**: Services are cached as singletons. This means the factory function runs **once**, and the same instance is returned for all future requests.
-
-#### ❌ **NOT RECOMMENDED**: Resolve options during service creation
-
-In most cases, this is too early to use `get_option()`, as option values should be resolved when they are actually needed by a method, and not during class construction.
+### ❌ Wrong: Passing Options to Constructor
 
 ```php
-<?php
+// wpdi-config.php
 return array(
-    // ❌ BAD: Options are cached at instantiation!
     'Plugin_Settings' => function() {
         return new Plugin_Settings(
-            get_option( 'plugin_api_key', '' ),      // Called once, cached for the request
-            get_option( 'plugin_timeout', 30 ),      // Option changes ignored
-            get_option( 'plugin_debug_mode', false ) // Stale values!
+            get_option('api_key', ''),     // ❌ Cached at instantiation!
+            get_option('timeout', 30)      // ❌ Changes ignored!
         );
     },
 );
 ```
 
-**Why this is wrong**:
-1. Factory runs once when first requested
-2. `get_option()` executes and returns current values (e.g., `api_key = "abc123"`)
-3. Instance is created and **cached as singleton**
-4. Admin changes option to `"xyz789"`
-5. The `Plugin_Settings` service keeps using the **original value** `"abc123"` until reloading the page again
-6. Other plugins might not have the chance to add hooks for the option value
+**Problem:**
 
-#### ✅ **RECOMMENDED**: WordPress Coding Standard Pattern
+1. Factory runs once when first requested
+2. `get_option()` returns current values
+3. Instance cached as singleton
+4. Admin changes option - cached instance still has old values
+
+### ✅ Correct: Fetch Options in Methods
 
 ```php
-<?php
-// wpdi-config.php - just instantiate the service
-return array(
-    'Plugin_Settings' => function() {
-        return new Plugin_Settings(); // No parameters!
-    },
-);
+// wpdi-config.php (often empty - let autowiring work!)
+return array();
 
-// Plugin_Settings.php - class handles option access internally
+// Plugin_Settings.php
 class Plugin_Settings {
     public function get_api_key(): string {
-        return get_option( 'plugin_api_key', '' ); // Resolve option value when it's needed
+        return get_option('api_key', '');  // Fresh value every call
     }
 
     public function get_timeout(): int {
-        return (int) get_option( 'plugin_timeout', 30 );
-    }
-
-    public function is_debug_mode(): bool {
-        return (bool) get_option( 'plugin_debug_mode', false );
+        return (int) get_option('timeout', 30);
     }
 }
 ```
 
-**Why this is correct**:
-- Service instance is cached (good for performance)
-- Each method call gets fresh option value via `get_option()`
-- Option changes are reflected immediately
-- Follows WordPress coding standards (classes encapsulate their option dependencies)
-- Other plugins can use hooks to modify or observe the option access
+**Why correct:**
 
-### Conditional Implementation Selection (Reference Only)
+- Service instance cached (good for performance)
+- Each method call gets fresh option value
+- Option changes reflected immediately
+- Follows WordPress coding standards
 
-**Note**: While WPDI supports this pattern, conditional selection based on options or feature flags is business logic and should typically be handled in a ServiceProvider class rather than in the DI configuration. These examples are shown for reference.
+## Conditional Selection (Reference)
+
+While supported, conditional logic is business logic - typically better in a ServiceProvider class:
 
 ```php
 <?php
+// Shown for reference - consider using ServiceProvider instead
 return array(
-    // Choose implementation based on WordPress options
     'Email_Service_Interface' => function() {
-        $settings = get_option( 'email_settings', array() );
+        $settings = get_option('email_settings', array());
 
-        // Select which class to instantiate (option values fetched inside the class)
-        if ( ! empty( $settings['smtp_enabled'] ) ) {
-            return new SMTP_Email_Service(); // Fetches SMTP settings internally
-        }
-
-        return new WP_Mail_Service();
-    },
-
-    // Choose implementation based on feature flags
-    'Payment_Gateway_Interface' => function() {
-        $gateway = get_option( 'active_payment_gateway', 'stripe' );
-
-        switch ( $gateway ) {
-            case 'paypal':
-                return new PayPal_Gateway();
-            case 'square':
-                return new Square_Gateway();
-            default:
-                return new Stripe_Gateway();
-        }
+        // Use option to CHOOSE implementation, not configure it
+        return !empty($settings['smtp_enabled'])
+            ? new SMTP_Email_Service()  // Fetches config internally
+            : new WP_Mail_Service();
     },
 );
 ```
 
-**Important**: If you use `get_option()` in factories, use it only to **choose which class** to instantiate, not to pass configuration values. The selected class should fetch its own configuration internally.
+**Note:** Using `get_option()` to **choose which class** to instantiate is acceptable. The class should fetch its own configuration internally.
 
-## Configuration Best Practices
+## Best Practices
 
-### ✅ Do This
+### ✅ Do
 
 ```php
-<?php
 return array(
-    // Interface binding - simple implementation selection
-    'Cache_Interface' => function() {
-        return new Redis_Cache();
-    },
+    // Simple interface binding
+    Logger_Interface::class => fn() => new WP_Logger(),
 
-    // Interface binding - another implementation
-    'Logger_Interface' => function() {
-        return new WP_Logger();
-    },
+    // Another interface binding
+    Cache_Interface::class => fn() => new Redis_Cache(),
 
-    // That's it! Keep wpdi-config.php minimal.
-    // Concrete classes with dependencies? Use autowiring - no config needed!
+    // That's it! Keep it minimal.
 );
 ```
 
-### ❌ Don't Do This
+### ❌ Don't
 
 ```php
-<?php
 return array(
-    // Don't instantiate outside factory function
-    'Bad_Config' => new Bad_Config(), // ❌ Runs immediately, not lazy!
+    // Don't instantiate outside factory
+    'Bad_Config' => new Bad_Config(),  // ❌ Not lazy!
 
-    // Don't pass options to WordPress services (they should handle internally)
-    'Bad_Settings' => function() {
-        return new Bad_Settings( get_option('setting') ); // ❌ Cached at instantiation!
-    },
+    // Don't pass options to constructors
+    'Bad_Settings' => fn() => new Bad_Settings(get_option('setting')),  // ❌ Cached!
 
-    // Don't manually create dependencies (use autowiring!)
+    // Don't manually create dependencies
     'Bad_Service' => function() {
-        $dependency = new Some_Dependency(); // ❌ Bypasses container, not a singleton!
-        return new Bad_Service( $dependency );
+        $dependency = new Some_Dependency();  // ❌ Bypasses container!
+        return new Bad_Service($dependency);
     },
 
     // Don't return scalars
-    'bad_setting' => function() {
-        return get_option( 'setting' ); // ❌ DI is for objects, not values!
-    },
+    'bad_setting' => fn() => get_option('setting'),  // ❌ DI is for objects!
 
-    // Don't use magic strings as keys
-    'some_string_key' => function() { // ❌ Use class names!
-        return new Service();
-    },
+    // Don't use magic strings
+    'some_string_key' => fn() => new Service(),  // ❌ Use class names!
 );
 ```
 
-**Remember**: If you need to inject dependencies into a service, use constructor injection and let autowiring handle it. Don't manually create dependencies in factories!
+**Remember:** For dependencies between services, use constructor injection and let autowiring handle it.
 
 ## Loading Configuration
 
-WPDI automatically loads `wpdi-config.php` if it exists in your plugin/theme directory. No additional code needed!
+WPDI automatically loads `wpdi-config.php` from your plugin/theme directory. No code needed!
 
-## Next Steps
+## Summary
 
-- [Testing](testing.md) - Unit testing configured services
-- [API Reference](api-reference.md) - Container methods and options
+- **Keep `wpdi-config.php` minimal** - only interface bindings
+- **Let autowiring handle dependencies** - don't create them in factories
+- **Fetch options in methods** - not in constructors
+- **Conditional logic?** - Use ServiceProvider class, not DI config
