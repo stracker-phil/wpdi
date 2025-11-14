@@ -118,6 +118,11 @@ class Container implements ContainerInterface {
 
 		$is_production = 'production' === wp_get_environment_type();
 
+		// On non-production environment we check cache-staleness on every request
+		if ( ! $is_production ) {
+			$this->delete_stale_cache( $cache_file );
+		}
+
 		// Load cached services or auto-discover
 		if ( $is_production && file_exists( $cache_file ) ) {
 			$this->load_compiled( require $cache_file );
@@ -255,5 +260,46 @@ class Container implements ContainerInterface {
 		$this->bindings  = array();
 		$this->instances = array();
 		$this->resolving = array();
+	}
+
+	/**
+	 * Delete cache file if it's stale (any cached file modified)
+	 *
+	 * Only checks files that were cached - if you modify an existing file
+	 * to inject a new class, that modification triggers cache rebuild.
+	 * New files without modifications to existing files require manual
+	 * cache clear (acceptable tradeoff for performance).
+	 */
+	private function delete_stale_cache( string $cache_file ): void {
+		// No cache to check
+		if ( ! file_exists( $cache_file ) ) {
+			return;
+		}
+
+		$cache_time = filemtime( $cache_file );
+
+		// Load cached class => filepath mapping
+		$cached_files = require $cache_file;
+
+		// Not an array? Invalid cache format
+		if ( ! is_array( $cached_files ) ) {
+			@unlink( $cache_file );
+			return;
+		}
+
+		// Check if any cached file was modified
+		foreach ( $cached_files as $file_path ) {
+			// File deleted? Cache is stale
+			if ( ! file_exists( $file_path ) ) {
+				@unlink( $cache_file );
+				return;
+			}
+
+			// File modified? Cache is stale
+			if ( filemtime( $file_path ) > $cache_time ) {
+				@unlink( $cache_file );
+				return;
+			}
+		}
 	}
 }
