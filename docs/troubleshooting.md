@@ -131,10 +131,10 @@ Initialize container after WordPress loads:
 
 ```php
 // ❌ Too early
-new My_Plugin();
+new My_Plugin( __FILE__ );
 
 // ✅ Wait for WordPress
-add_action('plugins_loaded', fn() => new My_Plugin());
+add_action('plugins_loaded', fn() => new My_Plugin( __FILE__ ));
 ```
 
 ## Debugging

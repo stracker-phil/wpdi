@@ -4,17 +4,20 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
-use ReflectionClass;
-
 /**
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
  */
 abstract class Scope {
 	private Container $container;
 
-	public function __construct() {
+	/**
+	 * Initialize the module
+	 *
+	 * @param string $scope_file Path to the implementing file (use __FILE__)
+	 */
+	public function __construct( string $scope_file ) {
 		$this->container = new Container();
-		$this->container->initialize( $this->get_base_path() );
+		$this->container->initialize( dirname( $scope_file ) );
 		$this->bootstrap();
 	}
 
@@ -32,15 +35,6 @@ abstract class Scope {
 	 */
 	protected function has( string $class ): bool {
 		return $this->container->has( $class );
-	}
-
-	/**
-	 * Get base path for auto-discovery (plugin, theme, or module directory)
-	 */
-	protected function get_base_path(): string {
-		$reflection = new ReflectionClass( $this );
-
-		return dirname( $reflection->getFileName() );
 	}
 
 	/**
