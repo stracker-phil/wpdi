@@ -22,13 +22,10 @@ return array(
     'Logger_Interface' => static function() {
         return new WP_Logger();
     },
-    
-    // WordPress option-based configuration
+
+    // WordPress services (use get_option() internally for fresh values)
     'Sample_Config' => static function() {
-        return new Sample_Config(
-            get_option( 'sample_plugin_enabled', true ),
-            get_option( 'sample_plugin_version', '1.0.0' )
-        );
+        return new Sample_Config();
     },
 );
 ```
@@ -47,12 +44,9 @@ return array(
 return array(
     // Interface bindings
     'Logger_Interface' => static fn() => new WP_Logger(),
-    
-    // WordPress option-based configuration
-    'Sample_Config' => static fn() => new Sample_Config(
-        get_option( 'sample_plugin_enabled', true ),
-        get_option( 'sample_plugin_version', '1.0.0' )
-    ),
+
+    // WordPress services (use get_option() internally for fresh values)
+    'Sample_Config' => static fn() => new Sample_Config(),
 );
 ```
 
@@ -125,30 +119,67 @@ return array(
 
 ### WordPress Option Integration
 
+**IMPORTANT**: Services are cached as singletons. This means the factory function runs **once**, and the same instance is returned for all future requests.
+
+#### ❌ **NOT RECOMMENDED**: Resolve options during service creation
+
+In most cases, this is too early to use `get_option()`, as option values should be resolved when they are actually needed by a method, and not during class construction.
+
 ```php
 <?php
 return array(
-    // Always fresh values from WordPress options
+    // ❌ BAD: Options are cached at instantiation!
     'Plugin_Settings' => function() {
         return new Plugin_Settings(
-            get_option( 'plugin_api_key', '' ),
-            get_option( 'plugin_timeout', 30 ),
-            get_option( 'plugin_retry_attempts', 3 ),
-            get_option( 'plugin_debug_mode', false )
-        );
-    },
-    
-    // User-specific configuration
-    'User_Preferences' => function() {
-        $user_id = get_current_user_id();
-        
-        return new User_Preferences(
-            get_user_meta( $user_id, 'plugin_theme', true ) ?: 'default',
-            get_user_meta( $user_id, 'plugin_notifications', true ) ?: true
+            get_option( 'plugin_api_key', '' ),      // Called once, cached for the request
+            get_option( 'plugin_timeout', 30 ),      // Option changes ignored
+            get_option( 'plugin_debug_mode', false ) // Stale values!
         );
     },
 );
 ```
+
+**Why this is wrong**:
+1. Factory runs once when first requested
+2. `get_option()` executes and returns current values (e.g., `api_key = "abc123"`)
+3. Instance is created and **cached as singleton**
+4. Admin changes option to `"xyz789"`
+5. The `Plugin_Settings` service keeps using the **original value** `"abc123"` until reloading the page again
+6. Other plugins might not have the chance to add hooks for the option value
+
+#### ✅ **RECOMMENDED**: WordPress Coding Standard Pattern
+
+```php
+<?php
+// wpdi-config.php - just instantiate the service
+return array(
+    'Plugin_Settings' => function() {
+        return new Plugin_Settings(); // No parameters!
+    },
+);
+
+// Plugin_Settings.php - class handles option access internally
+class Plugin_Settings {
+    public function get_api_key(): string {
+        return get_option( 'plugin_api_key', '' ); // Resolve option value when it's needed
+    }
+
+    public function get_timeout(): int {
+        return (int) get_option( 'plugin_timeout', 30 );
+    }
+
+    public function is_debug_mode(): bool {
+        return (bool) get_option( 'plugin_debug_mode', false );
+    }
+}
+```
+
+**Why this is correct**:
+- Service instance is cached (good for performance)
+- Each method call gets fresh option value via `get_option()`
+- Option changes are reflected immediately
+- Follows WordPress coding standards (classes encapsulate their option dependencies)
+- Other plugins can use hooks to modify or observe the option access
 
 ### Complex Factory Logic
 
@@ -189,22 +220,21 @@ return array(
 ```php
 <?php
 return array(
-    // Use get_option() for fresh values
+    // WordPress services handle get_option() internally
     'My_Config' => function() {
-        return new My_Config( get_option( 'my_setting' ) );
+        return new My_Config(); // Class calls get_option() in methods
     },
-    
-    // Environment-specific logic
+
+    // Environment-specific logic in factory
     'My_Service' => function() {
         return WP_DEBUG ? new Debug_Service() : new Production_Service();
     },
-    
-    // Clear factory logic
-    'Complex_Service' => function() {
-        $dependency_a = new Dependency_A();
-        $dependency_b = new Dependency_B( get_option( 'setting' ) );
-        
-        return new Complex_Service( $dependency_a, $dependency_b );
+
+    // Interface bindings can use constructor parameters for config
+    'API_Client_Interface' => function() {
+        // Choose one of two implementations
+        $is_live = defined('PLUGIN_LIVE_MODE') && PLUGIN_LIVE_MODE;
+        return $is_live ? new Live_API_Client() : new Sandbox_API_Client();
     },
 );
 ```
@@ -214,14 +244,21 @@ return array(
 ```php
 <?php
 return array(
-    // Don't cache option values
-    'Bad_Config' => new Bad_Config( get_option( 'setting' ) ), // ❌ Cached!
-    
+    // Don't instantiate outside factory function
+    'Bad_Config' => new Bad_Config(), // ❌ Runs immediately, not lazy!
+
+    // Don't pass options to WordPress services (they should handle internally)
+    'Bad_Settings' => function() {
+        return new Bad_Settings( get_option('setting') ); // ❌ Cached at instantiation!
+    },
+
     // Don't return scalars
-    'bad_setting' => get_option( 'setting' ), // ❌ Scalar value!
-    
-    // Don't use magic strings
-    'some_string_key' => function() { // ❌ Magic string!
+    'bad_setting' => function() {
+        return get_option( 'setting' ); // ❌ DI is for objects, not values!
+    },
+
+    // Don't use magic strings as keys
+    'some_string_key' => function() { // ❌ Use class names!
         return new Service();
     },
 );
