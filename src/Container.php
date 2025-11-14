@@ -29,9 +29,7 @@ class Container implements ContainerInterface {
 		}
 
 		if ( null === $factory ) {
-			$factory = function () use ( $abstract ) {
-				return $this->autowire( $abstract );
-			};
+			$factory = fn() => $this->autowire( $abstract );
 		}
 
 		// Note: is_callable() check omitted - the ?callable type hint ensures this at compile time
@@ -98,9 +96,11 @@ class Container implements ContainerInterface {
 	public function load_compiled( array $class_map ): void {
 		// Bind each cached class (autowiring will recreate factories)
 		foreach ( $class_map as $class => $file_path ) {
-			if ( ! isset( $this->bindings[ $class ] ) ) {
-				$this->bind( $class );
+			if ( isset( $this->bindings[ $class ] ) ) {
+				continue;
 			}
+
+			$this->bind( $class );
 		}
 	}
 
@@ -196,7 +196,7 @@ class Container implements ContainerInterface {
 				$instance     = new $class_name( ...$dependencies );
 			}
 
-			// Cache as singleton by default
+			// Auto-wiring treats every class as a singleton
 			$this->instances[ $class_name ] = $instance;
 
 			return $instance;
@@ -285,6 +285,7 @@ class Container implements ContainerInterface {
 		// Check Scope implementation file first
 		if ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time ) {
 			@unlink( $cache_file );
+
 			return;
 		}
 
@@ -294,6 +295,7 @@ class Container implements ContainerInterface {
 		// Not an array? Invalid cache format
 		if ( ! is_array( $cached_files ) ) {
 			@unlink( $cache_file );
+
 			return;
 		}
 
@@ -302,12 +304,14 @@ class Container implements ContainerInterface {
 			// File deleted? Cache is stale
 			if ( ! file_exists( $file_path ) ) {
 				@unlink( $cache_file );
+
 				return;
 			}
 
 			// File modified? Cache is stale
 			if ( filemtime( $file_path ) > $cache_time ) {
 				@unlink( $cache_file );
+
 				return;
 			}
 		}

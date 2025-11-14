@@ -28,14 +28,16 @@ class Auto_Discovery {
 		);
 
 		foreach ( $iterator as $file ) {
-			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$file_path          = $file->getPathname();
-				$discovered_classes = $this->extract_classes_from_file( $file_path );
+			if ( ! $file->isFile() || 'php' !== $file->getExtension() ) {
+				continue;
+			}
 
-				// Map each class to its file path
-				foreach ( $discovered_classes as $class ) {
-					$class_map[ $class ] = $file_path;
-				}
+			$file_path          = $file->getPathname();
+			$discovered_classes = $this->extract_classes_from_file( $file_path );
+
+			// Map each class to its file path
+			foreach ( $discovered_classes as $class ) {
+				$class_map[ $class ] = $file_path;
 			}
 		}
 
@@ -52,16 +54,22 @@ class Auto_Discovery {
 		$classes   = array();
 		$namespace = '';
 
-		for ( $i = 0; $i < count( $tokens ); $i ++ ) {
-			if ( is_array( $tokens[ $i ] ) ) {
-				if ( T_NAMESPACE === $tokens[ $i ][0] ) {
-					$namespace = $this->extract_namespace( $tokens, $i );
-				} elseif ( T_CLASS === $tokens[ $i ][0] ) {
-					$class_name = $this->extract_class_name( $tokens, $i );
-					if ( $class_name ) {
-						$full_class_name = $namespace ? $namespace . '\\' . $class_name : $class_name;
-						$classes[]       = $full_class_name;
-					}
+		foreach ( $tokens as $i => $iValue ) {
+			if ( ! is_array( $iValue ) ) {
+				continue;
+			}
+
+			if ( T_NAMESPACE === $iValue[0] ) {
+				$namespace = $this->extract_namespace( $tokens, $i );
+				continue;
+			}
+
+			if ( T_CLASS === $iValue[0] ) {
+				$class_name = $this->extract_class_name( $tokens, $i );
+
+				if ( $class_name ) {
+					$full_class_name = $namespace ? $namespace . '\\' . $class_name : $class_name;
+					$classes[]       = $full_class_name;
 				}
 			}
 		}
@@ -80,6 +88,7 @@ class Auto_Discovery {
 			if ( is_array( $tokens[ $index ] ) ) {
 				// PHP 8.0+ uses T_NAME_QUALIFIED for namespaces like "Foo\Bar"
 				$token_type = $tokens[ $index ][0];
+
 				if ( T_STRING === $token_type || T_NS_SEPARATOR === $token_type ||
 					( defined( 'T_NAME_QUALIFIED' ) && T_NAME_QUALIFIED === $token_type ) ) {
 					$namespace .= $tokens[ $index ][1];
