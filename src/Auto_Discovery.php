@@ -14,25 +14,32 @@ use ReflectionClass;
 class Auto_Discovery {
 	/**
 	 * Discover concrete classes in directory
+	 *
+	 * @return array Array mapping class names to file paths
 	 */
 	public function discover( string $directory ): array {
 		if ( ! is_dir( $directory ) ) {
 			return array();
 		}
 
-		$classes  = array();
-		$iterator = new RecursiveIteratorIterator(
+		$class_map = array();
+		$iterator  = new RecursiveIteratorIterator(
 			new RecursiveDirectoryIterator( $directory )
 		);
 
 		foreach ( $iterator as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$discovered_classes = $this->extract_classes_from_file( $file->getPathname() );
-				$classes            = array_merge( $classes, $discovered_classes );
+				$file_path          = $file->getPathname();
+				$discovered_classes = $this->extract_classes_from_file( $file_path );
+
+				// Map each class to its file path
+				foreach ( $discovered_classes as $class ) {
+					$class_map[ $class ] = $file_path;
+				}
 			}
 		}
 
-		return $this->filter_concrete_classes( $classes );
+		return $this->filter_concrete_classes( $class_map );
 	}
 
 	/**
@@ -104,18 +111,21 @@ class Auto_Discovery {
 
 	/**
 	 * Filter to only concrete, instantiable classes
+	 *
+	 * @param array $class_map Array mapping class names to file paths
+	 * @return array Filtered array mapping class names to file paths
 	 */
-	private function filter_concrete_classes( array $classes ): array {
+	private function filter_concrete_classes( array $class_map ): array {
 		$concrete = array();
 
-		foreach ( $classes as $class ) {
+		foreach ( $class_map as $class => $file_path ) {
 			if ( ! class_exists( $class ) ) {
 				continue;
 			}
 
 			$reflection = new ReflectionClass( $class );
 			if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
-				$concrete[] = $class;
+				$concrete[ $class ] = $file_path;
 			}
 		}
 
