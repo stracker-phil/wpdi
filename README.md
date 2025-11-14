@@ -35,7 +35,7 @@ class My_Payment_Plugin extends WPDI\Scope {
     }
 }
 
-new My_Payment_Plugin();
+new My_Payment_Plugin( __FILE__ );
 ```
 
 ### 3. Write Your Classes

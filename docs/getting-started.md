@@ -47,7 +47,7 @@ class My_Sample_Plugin extends WPDI\Scope {
 }
 
 // Initialize the plugin
-new My_Sample_Plugin();
+new My_Sample_Plugin( __FILE__ );
 ```
 
 ### Step 2: Create Your Application Class
