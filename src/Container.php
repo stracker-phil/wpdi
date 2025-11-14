@@ -106,6 +106,8 @@ class Container implements ContainerInterface {
 
 	/**
 	 * Initialize container with auto-discovery
+	 *
+	 * @param string $base_path Plugin/theme base directory
 	 */
 	public function initialize( string $base_path ): void {
 		$cache_file  = $base_path . '/cache/wpdi-container.php';
@@ -116,20 +118,21 @@ class Container implements ContainerInterface {
 			$this->load_config( require $config_file );
 		}
 
-		$is_production = 'production' === wp_get_environment_type();
+		$not_production = 'production' !== wp_get_environment_type();
 
 		// On non-production environment we check cache-staleness on every request
-		if ( ! $is_production ) {
+		if ( $not_production ) {
 			$this->delete_stale_cache( $cache_file );
 		}
 
-		// Load cached services or auto-discover
-		if ( $is_production && file_exists( $cache_file ) ) {
+		// Load cached services if a cache file exists
+		if ( file_exists( $cache_file ) ) {
 			$this->load_compiled( require $cache_file );
 
 			return;
 		}
 
+		// No cache file exists, auto-discover classes and cache them
 		$discovery = new Auto_Discovery();
 		$services  = $discovery->discover( $base_path . '/src' );
 
