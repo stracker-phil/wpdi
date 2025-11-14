@@ -93,11 +93,11 @@ class Container implements ContainerInterface {
 	/**
 	 * Load compiled class list from cache
 	 *
-	 * @param array $classes Array of discovered class names from cache
+	 * @param array $class_map Array mapping class names to file paths from cache
 	 */
-	public function load_compiled( array $classes ): void {
+	public function load_compiled( array $class_map ): void {
 		// Bind each cached class (autowiring will recreate factories)
-		foreach ( $classes as $class ) {
+		foreach ( $class_map as $class => $file_path ) {
 			if ( ! isset( $this->bindings[ $class ] ) ) {
 				$this->bind( $class );
 			}
@@ -128,13 +128,14 @@ class Container implements ContainerInterface {
 		$discovery = new Auto_Discovery();
 		$services  = $discovery->discover( $base_path . '/src' );
 
-			foreach ( $services as $class ) {
+		// $services is class => filepath mapping
+		foreach ( $services as $class => $file_path ) {
 			if ( ! isset( $this->bindings[ $class ] ) ) {
 				$this->bind( $class );
 			}
 		}
 
-			// Generate cache file with discovered classes (not bindings)
+		// Generate cache file with class => filepath mapping
 		$compiler = new Compiler();
 		$compiler->compile( $services, $cache_file );
 	}
