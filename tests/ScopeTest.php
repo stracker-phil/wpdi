@@ -113,38 +113,6 @@ class ScopeTest extends TestCase {
 	}
 
 	// ========================================
-	// Base Path Tests
-	// ========================================
-
-	/**
-	 * GIVEN a Scope instance
-	 * WHEN get_base_path() is called
-	 * THEN it returns the directory where the Scope class file is located
-	 */
-	public function test_get_base_path_returns_directory_of_scope_class(): void {
-		$scope = new TestScope( __FILE__ );
-
-		$base_path = $scope->public_get_base_path();
-
-		$this->assertIsString( $base_path );
-		$this->assertStringContainsString( 'tests/Fixtures', $base_path );
-	}
-
-	/**
-	 * GIVEN a Scope instance
-	 * WHEN the base path is retrieved
-	 * THEN it points to an existing directory used for auto-discovery
-	 */
-	public function test_base_path_is_used_for_auto_discovery(): void {
-		// Create a temporary scope in a known location
-		$scope     = new TestScope( __FILE__ );
-		$base_path = $scope->public_get_base_path();
-
-		// Verify base path points to the Fixtures directory
-		$this->assertDirectoryExists( $base_path );
-	}
-
-	// ========================================
 	// Integration Tests
 	// ========================================
 

@@ -28,8 +28,4 @@ class TestScope extends Scope {
 	public function public_has( string $class ): bool {
 		return $this->has( $class );
 	}
-
-	public function public_get_base_path(): string {
-		return $this->get_base_path();
-	}
 }

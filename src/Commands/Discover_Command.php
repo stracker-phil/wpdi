@@ -48,7 +48,7 @@ class Discover_Command {
 		}
 
 		$output = array();
-		foreach ( $classes as $class ) {
+		foreach ( $classes as $class => $file_path ) {
 			$output[] = array(
 				'class'       => $class,
 				'type'        => $this->get_class_type( $class ),
