@@ -1,4 +1,5 @@
 /vendor/
 /coverage/
+/tests/cache
 
 !CLAUDE.md
