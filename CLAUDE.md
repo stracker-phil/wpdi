@@ -281,6 +281,56 @@ class ServiceB {
 }
 ```
 
+**8. WordPress Option Pattern - Singleton Caching Trap**
+Services are singletons by default - the factory runs **once** and the instance is cached forever. Passing `get_option()` values to constructors caches them at instantiation.
+
+❌ **ANTI-PATTERN**: Passing options to constructor
+```php
+// wpdi-config.php
+return array(
+    'Payment_Config' => function() {
+        return new Payment_Config(
+            get_option('api_key', '')  // ❌ Called once, cached forever!
+        );
+    },
+);
+```
+
+**What happens**:
+1. First request: Factory runs, `get_option()` returns `"abc123"`, instance cached
+2. Admin changes option to `"xyz789"`
+3. All future requests get cached instance with old value `"abc123"`
+
+✅ **CORRECT**: WordPress coding standard pattern
+```php
+// wpdi-config.php - just instantiate
+return array(
+    'Payment_Config' => fn() => new Payment_Config(), // No parameters
+);
+
+// Payment_Config.php - class handles option access
+class Payment_Config {
+    public function get_api_key(): string {
+        return get_option('api_key', ''); // Fresh value on each call
+    }
+}
+```
+
+**Why this is correct**:
+- Follows WordPress coding standards (classes encapsulate their option dependencies)
+- Service instance cached (good for performance)
+- Option values fetched fresh on each method call
+- Option changes reflected immediately
+
+**Exception**: Interface bindings can use `get_option()` in factory to choose implementation:
+```php
+// OK: Using option to select which implementation to instantiate
+'API_Client_Interface' => function() {
+    $env = get_option('environment', 'sandbox');
+    return 'live' === $env ? new Live_Client() : new Sandbox_Client();
+},
+```
+
 ## Code Modification Guidelines
 
 **When modifying any source file:**
