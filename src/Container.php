@@ -116,25 +116,27 @@ class Container implements ContainerInterface {
 			$this->load_config( require $config_file );
 		}
 
+		$is_production = 'production' === wp_get_environment_type();
+
 		// Load cached services or auto-discover
-		if ( file_exists( $cache_file ) && 'production' === wp_get_environment_type() ) {
+		if ( $is_production && file_exists( $cache_file ) ) {
 			$this->load_compiled( require $cache_file );
-		} else {
-			$discovery = new Auto_Discovery();
-			$services  = $discovery->discover( $base_path . '/src' );
+
+			return;
+		}
+
+		$discovery = new Auto_Discovery();
+		$services  = $discovery->discover( $base_path . '/src' );
 
 			foreach ( $services as $class ) {
-				if ( ! isset( $this->bindings[ $class ] ) ) {
-					$this->bind( $class );
-				}
-			}
-
-			// Generate cache file with discovered classes (not bindings)
-			if ( ! file_exists( $cache_file ) ) {
-				$compiler = new Compiler();
-				$compiler->compile( $services, $cache_file );
+			if ( ! isset( $this->bindings[ $class ] ) ) {
+				$this->bind( $class );
 			}
 		}
+
+			// Generate cache file with discovered classes (not bindings)
+		$compiler = new Compiler();
+		$compiler->compile( $services, $cache_file );
 	}
 
 	/**
