@@ -67,24 +67,19 @@ That's it! WPDI automatically discovers and wires up your classes.
 
 ## Configuration (Optional)
 
-For interfaces and WordPress-specific services, create `wpdi-config.php`:
+For interface bindings, create `wpdi-config.php`:
 
 ```php
 <?php
 return array(
+    // Interface binding - tell WPDI which implementation to use
     'Payment_Client_Interface' => function() {
-        $env = get_option( 'payment_environment', 'sandbox' );
-        return 'live' === $env ? new PayPal_Live_Client() : new PayPal_Sandbox_Client();
-    },
-    
-    'Payment_Config' => function() {
-        return new Payment_Config(
-            get_option( 'payment_api_key' ),
-            get_option( 'payment_environment' )
-        );
+        return new PayPal_Client();
     },
 );
 ```
+
+**Note**: Most services don't need configuration - autowiring handles dependencies automatically. Only use `wpdi-config.php` for interface bindings. Keep this file minimal!
 
 ## Requirements
 
