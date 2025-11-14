@@ -17,7 +17,6 @@ class Container implements ContainerInterface {
 	private array $bindings = array();
 	private array $instances = array();
 	private array $resolving = array();
-	private bool $is_compiled = false;
 
 	/**
 	 * Bind a service to the container
@@ -103,7 +102,6 @@ class Container implements ContainerInterface {
 				$this->bind( $class );
 			}
 		}
-		$this->is_compiled = true;
 	}
 
 	/**
