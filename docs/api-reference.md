@@ -4,303 +4,229 @@ Complete reference for WPDI classes and methods.
 
 ## WPDI\Container
 
-The main dependency injection container implementing PSR-11.
+Main dependency injection container (PSR-11 compliant).
 
-### Methods
+### bind(string $abstract, ?callable $factory = null, bool $singleton = true): void
 
-#### bind( string $abstract, callable $factory = null, bool $singleton = true ): void
-
-Register a service with the container.
-
-**Parameters:**
-
-- `$abstract` - Class or interface name (must exist)
-- `$factory` - Optional factory function (defaults to autowiring)
-- `$singleton` - Whether to cache the instance (default: true)
-
-**Examples:**
+Register a service.
 
 ```php
 // Auto-wire concrete class
-$container->bind( 'Payment_Processor' );
+$container->bind(Payment_Processor::class);
 
 // Interface with factory
-$container->bind( 'Logger_Interface', function() {
-    return new WP_Logger();
-} );
+$container->bind(Logger_Interface::class, fn() => new WP_Logger());
 
 // Non-singleton (new instance each time)
-$container->bind( 'Temp_Service', null, false );
+$container->bind(Temp_Service::class, null, false);
 ```
-
-#### get( string $id ): mixed
-
-Retrieve a service from the container (PSR-11).
 
 **Parameters:**
 
-- `$id` - Class or interface name
+- `$abstract` - Class or interface name
+- `$factory` - Optional factory function (defaults to autowiring)
+- `$singleton` - Cache instance (default: true)
 
-**Returns:** Service instance
+### get(string $id): mixed
+
+Retrieve a service (PSR-11).
+
+```php
+$processor = $container->get(Payment_Processor::class);
+```
 
 **Throws:**
 
-- `WPDI\Exceptions\Not_Found_Exception` - Service not found
-- `WPDI\Exceptions\Container_Exception` - Resolution error
+- `Not_Found_Exception` - Service not found
+- `Container_Exception` - Resolution error
 
-**Examples:**
-
-```php
-$processor = $container->get( 'Payment_Processor' );
-$logger = $container->get( 'Logger_Interface' );
-```
-
-#### has( string $id ): bool
+### has(string $id): bool
 
 Check if container can provide a service (PSR-11).
 
-**Parameters:**
-
-- `$id` - Class or interface name
-
-**Returns:** `true` if service available, `false` otherwise
-
-**Examples:**
-
 ```php
-if ( $container->has( 'Optional_Service' ) ) {
-    $service = $container->get( 'Optional_Service' );
+if ($container->has(Optional_Service::class)) {
+    $service = $container->get(Optional_Service::class);
 }
 ```
 
-#### load_config( array $config ): void
+### load_config(array $config): void
 
-Load service bindings from configuration array.
-
-**Parameters:**
-
-- `$config` - Array of service bindings
-
-**Examples:**
+Load service bindings from array.
 
 ```php
-$config = array(
-    'Logger_Interface' => function() { return new WP_Logger(); }
-);
-$container->load_config( $config );
+$container->load_config(array(
+    Logger_Interface::class => fn() => new WP_Logger(),
+));
 ```
 
-#### initialize( string $base_path ): void
+### initialize(string $base_path): void
 
-Initialize container with auto-discovery and caching.
-
-**Parameters:**
-
-- `$base_path` - Path to module directory (contains `src/` and optional `wpdi-config.php`)
-
-**Examples:**
+Initialize with auto-discovery and caching.
 
 ```php
 $container = new WPDI\Container();
-$container->initialize( __DIR__ );
+$container->initialize(__DIR__);
 ```
 
-#### get_registered(): array
+### get_registered(): array
 
-Get list of all registered service names (for debugging).
+Get all registered service names (for debugging).
 
-**Returns:** Array of service names
+### clear(): void
 
-#### clear(): void
-
-Clear all bindings and cached instances (for testing).
+Clear all bindings and instances (for testing).
 
 ## WPDI\Scope
 
-Base class for WordPress modules using WPDI.
+Base class for WordPress modules.
 
-### Methods
+### bootstrap(): void (abstract)
 
-#### __construct()
-
-Initializes container and calls `bootstrap()`.
-
-#### bootstrap(): void (abstract)
-
-Composition root method - implement this in your module.
-
-**Examples:**
+Composition root - implement in your module.
 
 ```php
 class My_Plugin extends WPDI\Scope {
     protected function bootstrap(): void {
-        $app = $this->get( 'My_Application' );
+        $app = $this->get(My_Application::class);
         $app->run();
     }
 }
 ```
 
-#### get( string $class ): mixed (protected)
+### get(string $class): mixed (protected)
 
-Get service from container. Only available within the Scope class.
+Get service from container. Only available within Scope.
 
-**Parameters:**
+### has(string $class): bool (protected)
 
-- `$class` - Class or interface name
+Check if service exists. Only available within Scope.
 
-**Returns:** Service instance
+### get_base_path(): string (protected)
 
-#### has( string $class ): bool (protected)
+Get base path for auto-discovery.
 
-Check if service exists. Only available within the Scope class.
+## Exceptions
 
-**Parameters:**
+### WPDI_Exception
 
-- `$class` - Class or interface name
+Base exception for all WPDI errors.
 
-**Returns:** `true` if service available
+### Container_Exception
 
-#### get_base_path(): string (protected)
-
-Get the base path for auto-discovery (directory containing the Scope class).
-
-**Returns:** Directory path
-
-## Exception Classes
-
-### WPDI\Exceptions\Container_Exception
-
-Thrown when container encounters an error (implements PSR-11 `ContainerExceptionInterface`).
+Container errors (PSR-11 `ContainerExceptionInterface`).
 
 **Common causes:**
 
 - Invalid factory function
 - Circular dependencies
-- Invalid class/interface name
 - Reflection errors
 
-### WPDI\Exceptions\Not_Found_Exception
+### Not_Found_Exception
 
-Thrown when requested service cannot be found (implements PSR-11 `NotFoundExceptionInterface`).
+Service not found (PSR-11 `NotFoundExceptionInterface`).
 
 **Common causes:**
 
-- Service not registered and not auto-discoverable
-- Typo in class name
+- Service not registered or auto-discoverable
 - Class file not in `src/` directory
 
-## Configuration File Structure
+### Circular_Dependency_Exception
+
+Circular constructor dependencies detected.
+
+**Example:** `ServiceA -> ServiceB -> ServiceA`
+
+## Configuration File
 
 ### wpdi-config.php
 
-Optional configuration file in your module root directory.
+Optional configuration in module root.
 
 **Structure:**
 
 ```php
 <?php
 return array(
-    'Service_Name' => factory_function,
-    'Interface_Name' => factory_function,
-    // ... more bindings
+    Interface_Name::class => fn() => new Implementation(),
 );
 ```
 
-**Factory Function Signature:**
-
-```php
-function(): object {
-    // Return service instance
-    return new Service();
-}
-```
+**Factory signature:** `function(): object`
 
 **Examples:**
 
 ```php
-<?php
 return array(
-    // Interface binding - tell WPDI which implementation to use
-    'Logger_Interface' => function() {
-        return new WP_Logger();
-    },
+    // Interface binding
+    Logger_Interface::class => fn() => new WP_Logger(),
 
-    // Interface binding - another example
-    'Cache_Interface' => function() {
-        return new Redis_Cache();
-    },
+    // Another binding
+    Cache_Interface::class => fn() => new Redis_Cache(),
 
-    // Interface binding - simple and straightforward
-    'API_Client_Interface' => function() {
-        return new Live_Client();
-    },
+    // That's it - keep it minimal!
 );
 ```
 
-**Note**: Factories receive **no arguments** (no container access). For services with dependencies, use constructor injection and let autowiring handle it automatically. Keep `wpdi-config.php` minimal - only interface bindings!
+**Note:** Factories receive **no arguments** (no container access). For dependencies, use constructor injection and autowiring.
 
-## Auto-Discovery Rules
-
-### Discovered Classes
+## Auto-Discovery
 
 WPDI automatically discovers classes that are:
 
 - ✅ In `src/` directory (recursive)
-- ✅ Concrete classes (not abstract, not interfaces)
-- ✅ Instantiable (public constructor or no constructor)
+- ✅ Concrete classes (not abstract, interfaces, or traits)
+- ✅ Instantiable (public or no constructor)
 - ✅ Proper PHP class syntax
 
-### File Naming
+### File Naming (PSR-4)
 
-WPDI uses PSR-4 file naming conventions:
+```
+✅ My_Service.php         (matches class name)
+✅ Payment_Processor.php  (matches class name)
+❌ class-my-service.php   (old WP style - not discovered)
+❌ my-service.php         (doesn't match class name)
+```
 
-- ✅ `My_Service.php` - Correct (matches class name)
-- ✅ `Payment_Processor.php` - Correct (matches class name)
-- ❌ `class-my-service.php` - Not discovered (old WordPress style)
-- ❌ `my-service.php` - Not discovered
-
-Files must be named exactly as the class name they contain (case-sensitive on most systems).
+Files must match class names exactly (case-sensitive on most systems).
 
 ### Class Naming
 
-Class names should use WordPress conventions with underscores:
+Use WordPress conventions with underscores:
 
-- ✅ `My_Service` - Correct (WordPress style with underscores)
-- ✅ `Payment_Processor` - Correct (WordPress style with underscores)
-- ⚠️ `MyService` - Works but not WordPress style (PascalCase without underscores)
+```php
+✅ class My_Service {}         // WordPress style
+✅ class Payment_Processor {}  // WordPress style
+⚠️ class MyService {}          // Works but not WordPress style
+```
 
-## Performance Considerations
+## Performance
 
 ### Cache Files
 
-WPDI generates cache files for production:
-
 - **Location:** `{module}/cache/wpdi-container.php`
-- **When:** Automatically in production environment
-- **Contains:** Pre-compiled service definitions
+- **When:** Automatically in production
+- **Contains:** Pre-compiled class names
 
-### Memory Usage
+### Memory
 
 - **Development:** Classes loaded on-demand via reflection
-- **Production:** Pre-compiled bindings, minimal memory overhead
-- **Container:** Singletons cached, non-singletons created fresh
+- **Production:** Pre-compiled bindings, minimal overhead
+- **Singletons:** Cached per request
+- **Non-singletons:** Created fresh each time
 
 ### Best Practices
 
 ```php
-// ✅ Good - lightweight factory
-'Simple_Service' => function() {
-    return new Simple_Service();
-}
+// ✅ Lightweight factory
+Simple_Service::class => fn() => new Simple_Service(),
 
-// ❌ Avoid - heavy computation in factory
-'Heavy_Service' => function() {
-    $expensive_data = expensive_computation(); // Runs on every request
-    return new Heavy_Service( $expensive_data );
-}
+// ❌ Avoid expensive operations
+Heavy_Service::class => function() {
+    $data = expensive_api_call();  // Runs every request!
+    return new Heavy_Service($data);
+},
 
 // ✅ Better - lazy computation
-'Heavy_Service' => function() {
-    return new Heavy_Service(); // Let the service handle expensive ops
-}
+Heavy_Service::class => fn() => new Heavy_Service(),  // Service handles expensive ops
 ```
