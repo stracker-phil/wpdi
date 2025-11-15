@@ -367,7 +367,6 @@ class ContainerTest extends TestCase {
 		try {
 			$this->container->initialize( $temp_dir );
 
-			// Should have loaded SimpleClass from cache (line 123)
 			$this->assertTrue( $this->container->has( SimpleClass::class ) );
 			$instance = $this->container->get( SimpleClass::class );
 			$this->assertInstanceOf( SimpleClass::class, $instance );
@@ -460,18 +459,14 @@ PHP;
 		$scope_file = $temp_dir . '/test-scope.php';
 		file_put_contents( $scope_file, "<?php\n// Fake scope file for testing" );
 
-		// Initialize - this should discover and bind DiscoverableTestClass (line 130)
 		$container->initialize( $scope_file );
 
-		// DiscoverableTestClass should have been discovered and bound (line 130)
 		$this->assertTrue( $container->has( 'WPDI\Tests\Discovery\DiscoverableTestClass' ) );
 
-		// Should be able to get it (autowired via the bind in line 130)
 		$instance = $container->get( 'WPDI\Tests\Discovery\DiscoverableTestClass' );
 		$this->assertInstanceOf( 'WPDI\Tests\Discovery\DiscoverableTestClass', $instance );
 		$this->assertEquals( 'I was discovered!', $instance->get_message() );
 
-		// Cache file should be created (lines 136-137)
 		$cache_file = $temp_dir . '/cache/wpdi-container.php';
 		$this->assertFileExists( $cache_file );
 

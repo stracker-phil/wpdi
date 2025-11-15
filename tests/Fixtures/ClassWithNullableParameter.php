@@ -3,8 +3,8 @@
 namespace WPDI\Tests\Fixtures;
 
 /**
- * Test fixture with nullable parameter WITHOUT default value
- * This ensures we test the allowsNull() path (line 233) instead of isDefaultValueAvailable()
+ * Test fixture with nullable parameter WITHOUT default value.
+ * Tests that autowiring resolves null for nullable parameters when no default is provided.
  */
 class ClassWithNullableParameter {
 	private $optional_dependency;
