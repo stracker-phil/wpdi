@@ -34,4 +34,3 @@ class Compiler {
 		return false !== file_put_contents( $cache_file, $content );
 	}
 }
-

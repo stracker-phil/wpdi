@@ -258,4 +258,3 @@ class Container implements ContainerInterface {
 		return $this->resolver;
 	}
 }
-
