@@ -112,45 +112,18 @@ class Container implements ContainerInterface {
 	 */
 	public function initialize( string $scope_file ): void {
 		$base_path   = dirname( $scope_file );
-		$cache_file  = $base_path . '/cache/wpdi-container.php';
 		$config_file = $base_path . '/wpdi-config.php';
-		$src_path    = $base_path . '/src';
 
 		// Load user configuration first
 		if ( file_exists( $config_file ) ) {
 			$this->load_config( require $config_file );
 		}
 
-		$not_production = 'production' !== wp_get_environment_type();
+		// Delegate cache management
+		$cache_manager = new Cache_Manager( $base_path );
+		$class_map     = $cache_manager->get_class_map( $scope_file );
 
-		// Load cached services if cache exists
-		if ( file_exists( $cache_file ) ) {
-			$cached_map = require $cache_file;
-
-			// On non-production, check for incremental updates
-			if ( $not_production ) {
-				$cached_map = $this->update_stale_cache( $cached_map, $cache_file, $scope_file, $src_path );
-			}
-
-			$this->load_compiled( $cached_map );
-
-			return;
-		}
-
-		// No cache file exists, auto-discover classes and cache them
-		$discovery = new Auto_Discovery();
-		$services  = $discovery->discover( $src_path );
-
-		// $services is class => metadata mapping
-		foreach ( $services as $class => $metadata ) {
-			if ( ! isset( $this->bindings[ $class ] ) ) {
-				$this->bind( $class );
-			}
-		}
-
-		// Generate cache file with class => metadata mapping
-		$compiler = new Compiler();
-		$compiler->compile( $services, $cache_file );
+		$this->load_compiled( $class_map );
 	}
 
 	/**
@@ -284,198 +257,5 @@ class Container implements ContainerInterface {
 
 		return $this->resolver;
 	}
-
-	/**
-	 * Update cache incrementally if files have changed
-	 *
-	 * Checks the Scope implementation file first (catches bootstrap() changes),
-	 * then incrementally updates only modified files. New dependencies are discovered
-	 * when they're referenced by modified files.
-	 *
-	 * @param array  $cached_map Array mapping class names to metadata.
-	 * @param string $cache_file Path to cache file.
-	 * @param string $scope_file Path to scope file.
-	 * @param string $src_path   Path to src directory.
-	 * @return array Updated class map.
-	 */
-	private function update_stale_cache( array $cached_map, string $cache_file, string $scope_file, string $src_path ): array {
-		// Not an array or empty? Full rebuild needed
-		if ( empty( $cached_map ) ) {
-			@unlink( $cache_file );
-
-			return $this->full_discovery( $src_path, $cache_file );
-		}
-
-		// Check Scope implementation file first - if changed, do full rebuild
-		$cache_time = filemtime( $cache_file );
-		if ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time ) {
-			@unlink( $cache_file );
-
-			return $this->full_discovery( $src_path, $cache_file );
-		}
-
-		// Check wpdi-config.php - if changed, do full rebuild
-		$config_file = dirname( $scope_file ) . '/wpdi-config.php';
-		if ( file_exists( $config_file ) && filemtime( $config_file ) > $cache_time ) {
-			@unlink( $cache_file );
-
-			return $this->full_discovery( $src_path, $cache_file );
-		}
-
-		$needs_update = false;
-		$updated_map  = array();
-
-		// Check each cached class for staleness
-		foreach ( $cached_map as $class => $metadata ) {
-			// Invalid metadata format? Full rebuild needed
-			if ( ! is_array( $metadata ) || ! isset( $metadata['path'], $metadata['mtime'] ) ) {
-				@unlink( $cache_file );
-
-				return $this->full_discovery( $src_path, $cache_file );
-			}
-
-			$file_path = $metadata['path'];
-
-			// File deleted/renamed? Skip (don't re-add)
-			if ( ! file_exists( $file_path ) ) {
-				$needs_update = true;
-				continue;
-			}
-
-			// File modified? Re-parse it
-			if ( filemtime( $file_path ) > $metadata['mtime'] ) {
-				$parsed_classes = $this->reparse_class_file( $file_path );
-
-				// Add all classes found in the file (handles renames/additions)
-				foreach ( $parsed_classes as $parsed_class => $parsed_metadata ) {
-					$updated_map[ $parsed_class ] = $parsed_metadata;
-				}
-
-				$needs_update = true;
-				continue;
-			}
-
-			// File unchanged, keep cached
-			$updated_map[ $class ] = $metadata;
-		}
-
-		// Discover NEW dependencies from modified/existing classes
-		$updated_map = $this->discover_new_dependencies( $updated_map );
-
-		// Write updated cache if anything changed
-		if ( $needs_update || count( $updated_map ) !== count( $cached_map ) ) {
-			$compiler = new Compiler();
-			$compiler->compile( $updated_map, $cache_file );
-		}
-
-		return $updated_map;
-	}
-
-	/**
-	 * Re-parse a single class file to get updated metadata
-	 *
-	 * @param string $file_path Path to PHP file.
-	 * @return array Array mapping class names to metadata (may contain multiple classes).
-	 */
-	private function reparse_class_file( string $file_path ): array {
-		return ( new Auto_Discovery() )->parse_file( $file_path );
-	}
-
-	/**
-	 * Discover new dependencies referenced by cached classes
-	 *
-	 * @param array $class_map Current class map.
-	 * @return array Updated class map with new dependencies.
-	 */
-	private function discover_new_dependencies( array $class_map ): array {
-		$to_check = $class_map;
-
-		// Iteratively discover dependencies until no new ones found
-		do {
-			$new_deps = array();
-
-			foreach ( $to_check as $metadata ) {
-				if ( ! isset( $metadata['dependencies'] ) || ! is_array( $metadata['dependencies'] ) ) {
-					continue;
-				}
-
-				foreach ( $metadata['dependencies'] as $dep ) {
-					// Skip if already in map or not a class
-					if ( isset( $class_map[ $dep ] ) || ! class_exists( $dep ) ) {
-						continue;
-					}
-
-					// Discover this new dependency
-					$dep_metadata = $this->discover_single_class( $dep );
-					if ( $dep_metadata ) {
-						$class_map[ $dep ] = $dep_metadata;
-						$new_deps[ $dep ]  = $dep_metadata;
-					}
-				}
-			}
-
-			$to_check = $new_deps;
-		} while ( ! empty( $new_deps ) );
-
-		return $class_map;
-	}
-
-	/**
-	 * Discover metadata for a single class
-	 *
-	 * @param string $class_name Fully qualified class name.
-	 * @return array|null Metadata array or null if not discoverable.
-	 */
-	private function discover_single_class( string $class_name ): ?array {
-		if ( ! class_exists( $class_name ) ) {
-			return null;
-		}
-
-		$reflection = new \ReflectionClass( $class_name );
-
-		// Must be instantiable and concrete
-		if ( ! $reflection->isInstantiable() || $reflection->isAbstract() || $reflection->isInterface() ) {
-			return null;
-		}
-
-		$file_path = $reflection->getFileName();
-		if ( ! $file_path ) {
-			return null; // Internal class
-		}
-
-		// Extract dependencies
-		$dependencies = array();
-		$constructor  = $reflection->getConstructor();
-		if ( $constructor ) {
-			foreach ( $constructor->getParameters() as $param ) {
-				$type = $param->getType();
-				if ( $type instanceof \ReflectionNamedType && ! $type->isBuiltin() ) {
-					$dependencies[] = $type->getName();
-				}
-			}
-		}
-
-		return array(
-			'path'         => $file_path,
-			'mtime'        => filemtime( $file_path ),
-			'dependencies' => $dependencies,
-		);
-	}
-
-	/**
-	 * Perform full discovery and cache
-	 *
-	 * @param string $src_path   Path to src directory.
-	 * @param string $cache_file Path to cache file.
-	 * @return array Discovered class map.
-	 */
-	private function full_discovery( string $src_path, string $cache_file ): array {
-		$discovery = new Auto_Discovery();
-		$services  = $discovery->discover( $src_path );
-
-		$compiler = new Compiler();
-		$compiler->compile( $services, $cache_file );
-
-		return $services;
-	}
 }
+

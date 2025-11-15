@@ -95,7 +95,14 @@ ddev composer update
 - Production optimization: skips auto-discovery on cached systems
 - Metadata enables efficient mtime-based staleness detection
 
-**6. WP-CLI Commands (`src/Commands/`)**
+**6. Cache_Manager (`src/Cache_Manager.php`)**
+
+- Handles all cache operations (loading, staleness checks, incremental updates)
+- Separates cache concerns from DI core (Single Responsibility Principle)
+- Implements incremental updates: only re-parses modified files
+- Discovers new dependencies transitively when referenced by cached code
+
+**7. WP-CLI Commands (`src/Commands/`)**
 
 - **cli.php** - Registration file that loads and registers all commands
 - **Compile_Command.php** - Compiles container cache for production
@@ -103,7 +110,7 @@ ddev composer update
 - **Clear_Command.php** - Clears compiled cache files
 - Each command follows Single Responsibility Principle
 
-**7. Exception Hierarchy (`src/Exceptions/`)**
+**8. Exception Hierarchy (`src/Exceptions/`)**
 
 ```
 WPDI_Exception (base for all library exceptions)
