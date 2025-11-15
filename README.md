@@ -1,69 +1,51 @@
 # WPDI - WordPress Dependency Injection
 
-A lightweight, WordPress-native dependency injection container that follows WordPress coding standards.
+Lightweight, WordPress-native dependency injection with auto-discovery and zero configuration.
 
 ## Features
 
-- ✅ **Drop-in Ready** - No Composer required, works immediately
-- ✅ **Auto-Discovery** - Zero configuration for concrete classes
-- ✅ **WordPress Native** - Follows WordPress coding standards and patterns
-- ✅ **Type Safe** - Full PHP type hint support with clear error messages
-- ✅ **Performance Optimized** - Automatic compilation for production
-- ✅ **PSR-11 Compatible** - Standard container interface
+- **Zero Config** - Autowires concrete classes automatically
+- **WordPress Native** - Follows WordPress coding standards
+- **PSR-11 Compatible** - Standard container interface
+- **Type Safe** - Full type hint support with clear errors
 
 ## Quick Start
-
-### 1. Installation
-
-```php
-// Download WPDI and include in your plugin/theme
-require_once __DIR__ . '/wpdi/init.php';
-```
-
-### 2. Create Your Plugin/Module
 
 ```php
 <?php
 /**
- * Plugin Name: My Payment Plugin
+ * Plugin Name: My Plugin
  */
 
-class My_Payment_Plugin extends WPDI\Scope {
-    protected function bootstrap(): void {
-        $app = $this->get( 'Payment_Application' );
+require_once __DIR__ . '/wpdi/init.php';
+
+class My_Plugin extends WPDI\Scope {
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        $app = $r->get( My_Application::class );
         $app->run();
     }
 }
 
-new My_Payment_Plugin( __FILE__ );
+new My_Plugin( __FILE__ );
 ```
 
-### 3. Write Your Classes
+Your classes in `src/` are auto-discovered and autowired:
 
 ```php
 <?php
-// src/Payment_Processor.php
+// src/My_Application.php
 
-class Payment_Processor {
-    public function __construct( 
-        Payment_Validator $validator,
-        Payment_Config $config 
-    ) {
-        $this->validator = $validator;
-        $this->config = $config;
+class My_Application {
+    public function __construct( My_Service $service, My_Logger $logger ) {
+        $this->service = $service;
+        $this->logger = $logger;
     }
-    
-    public function process_payment( WC_Order $order ): bool {
-        if ( $this->validator->validate( $order ) ) {
-            // Process payment logic
-            return true;
-        }
-        return false;
+
+    public function run(): void {
+        add_action( 'init', array( $this, 'on_init' ) );
     }
 }
 ```
-
-That's it! WPDI automatically discovers and wires up your classes.
 
 ## Configuration (Optional)
 
@@ -72,14 +54,12 @@ For interface bindings, create `wpdi-config.php`:
 ```php
 <?php
 return array(
-    // Interface binding - tell WPDI which implementation to use
-    'Payment_Client_Interface' => function() {
-        return new PayPal_Client();
-    },
+    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Cache_Interface::class  => fn( $r ) => new Redis_Cache(
+        $r->get( Logger_Interface::class )
+    ),
 );
 ```
-
-**Note**: Most services don't need configuration - autowiring handles dependencies automatically. Only use `wpdi-config.php` for interface bindings. Keep this file minimal!
 
 ## Requirements
 
@@ -88,12 +68,13 @@ return array(
 
 ## Documentation
 
-- [Getting Started Guide](docs/getting-started.md)
+- [Getting Started](docs/getting-started.md)
 - [Configuration](docs/configuration.md)
 - [Testing](docs/testing.md)
 - [WP-CLI Commands](docs/wp-cli.md)
 - [API Reference](docs/api-reference.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ## License
 
-GPL-2.0 - Compatible with WordPress.org
+GPL-2.0

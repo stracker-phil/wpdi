@@ -2,65 +2,28 @@
 
 WPDI works with zero configuration for concrete classes. You only need `wpdi-config.php` for interface bindings.
 
-## The wpdi-config.php File
-
-Create in your plugin/theme root:
+## Basic Usage
 
 ```php
 <?php
+// wpdi-config.php
 return array(
-    Logger_Interface::class => fn() => new WP_Logger(),
-    Cache_Interface::class => fn() => new Redis_Cache(),
+    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Cache_Interface::class  => fn( $r ) => new Redis_Cache(
+        $r->get( Logger_Interface::class )
+    ),
 );
 ```
 
-## Design Philosophy
-
-**Factories receive NO arguments** - they cannot access the container or resolve dependencies.
-
-###Why This Limitation
-
-Prevents the Service Locator anti-pattern:
-
-```php
-// ❌ NOT POSSIBLE (and that's good!)
-'Payment_Service' => function($container) {
-    return new Payment_Service(
-        $container->get('Payment_Gateway'),  // Service Locator anti-pattern
-        $container->get('Logger')
-    );
-}
-```
-
-Forces proper dependency injection:
-
-```php
-// ✅ CORRECT - use constructor injection
-class Payment_Service {
-    public function __construct(
-        Payment_Gateway $gateway,
-        Logger $logger
-    ) {
-        $this->gateway = $gateway;
-        $this->logger = $logger;
-    }
-}
-// No configuration needed - autowired automatically!
-```
-
-### What Belongs Here
-
-**Only interface bindings.** If a class can be autowired, don't configure it.
-
-Conditional logic (environment, feature flags) is business logic - handle it in a ServiceProvider class, not DI configuration.
+Factories receive a `Resolver` (`$r`) with `get()` and `has()` methods for resolving dependencies.
 
 ## Interface Bindings
 
 ```php
 <?php
 interface Cache_Interface {
-    public function get(string $key);
-    public function set(string $key, $value, int $ttl = 3600): bool;
+    public function get( string $key );
+    public function set( string $key, $value ): bool;
 }
 
 class Redis_Cache implements Cache_Interface {
@@ -69,132 +32,82 @@ class Redis_Cache implements Cache_Interface {
 
 // wpdi-config.php
 return array(
-    Cache_Interface::class => fn() => new Redis_Cache(),
+    Cache_Interface::class => fn( $r ) => new Redis_Cache(),
 );
 ```
 
-Now any service depending on `Cache_Interface` gets `Redis_Cache` injected automatically.
+Any service depending on `Cache_Interface` receives `Redis_Cache`.
 
-## WordPress Option Pattern
+## WordPress Options
 
-**CRITICAL:** Services are singletons - factories run once and instances are cached.
+Services are **singletons** - factories run once, instances are cached.
 
-### ❌ Wrong: Passing Options to Constructor
+### Wrong: Options in Constructor
 
 ```php
 // wpdi-config.php
 return array(
-    'Plugin_Settings' => function() {
-        return new Plugin_Settings(
-            get_option('api_key', ''),     // ❌ Cached at instantiation!
-            get_option('timeout', 30)      // ❌ Changes ignored!
-        );
-    },
+    My_Service::class => fn( $r ) => new My_Service(
+        get_option( 'api_key', '' )  // Cached forever!
+    ),
 );
 ```
 
-**Problem:**
+Option changes are ignored after first instantiation.
 
-1. Factory runs once when first requested
-2. `get_option()` returns current values
-3. Instance cached as singleton
-4. Admin changes option - cached instance still has old values
-
-### ✅ Correct: Fetch Options in Methods
+### Correct: Options in Methods
 
 ```php
-// wpdi-config.php (often empty - let autowiring work!)
-return array();
-
-// Plugin_Settings.php
-class Plugin_Settings {
+class My_Service {
     public function get_api_key(): string {
-        return get_option('api_key', '');  // Fresh value every call
-    }
-
-    public function get_timeout(): int {
-        return (int) get_option('timeout', 30);
+        return get_option( 'api_key', '' );  // Fresh every call
     }
 }
 ```
 
-**Why correct:**
+No configuration needed - autowiring handles it.
 
-- Service instance cached (good for performance)
-- Each method call gets fresh option value
-- Option changes reflected immediately
-- Follows WordPress coding standards
+## Conditional Bindings
 
-## Conditional Selection (Reference)
-
-While supported, conditional logic is business logic - typically better in a ServiceProvider class:
+Use constants or environment checks (safe during bootstrap):
 
 ```php
-<?php
-// Shown for reference - consider using ServiceProvider instead
 return array(
-    'Email_Service_Interface' => function() {
-        $settings = get_option('email_settings', array());
-
-        // Use option to CHOOSE implementation, not configure it
-        return !empty($settings['smtp_enabled'])
-            ? new SMTP_Email_Service()  // Fetches config internally
-            : new WP_Mail_Service();
-    },
+    Email_Interface::class => fn( $r ) => defined( 'SMTP_ENABLED' )
+        ? $r->get( SMTP_Mailer::class )
+        : $r->get( WP_Mailer::class ),
 );
 ```
 
-**Note:** Using `get_option()` to **choose which class** to instantiate is acceptable. The class should fetch its own configuration internally.
+**Avoid business logic** in factories - WordPress may not be fully initialized.
 
 ## Best Practices
 
-### ✅ Do
+### Do
 
 ```php
 return array(
-    // Simple interface binding
-    Logger_Interface::class => fn() => new WP_Logger(),
-
-    // Another interface binding
-    Cache_Interface::class => fn() => new Redis_Cache(),
-
-    // That's it! Keep it minimal.
+    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Cache_Interface::class  => fn( $r ) => new Redis_Cache(),
 );
 ```
 
-### ❌ Don't
+### Don't
 
 ```php
 return array(
-    // Don't instantiate outside factory
-    'Bad_Config' => new Bad_Config(),  // ❌ Not lazy!
-
-    // Don't pass options to constructors
-    'Bad_Settings' => fn() => new Bad_Settings(get_option('setting')),  // ❌ Cached!
-
-    // Don't manually create dependencies
-    'Bad_Service' => function() {
-        $dependency = new Some_Dependency();  // ❌ Bypasses container!
-        return new Bad_Service($dependency);
-    },
-
-    // Don't return scalars
-    'bad_setting' => fn() => get_option('setting'),  // ❌ DI is for objects!
-
-    // Don't use magic strings
-    'some_string_key' => fn() => new Service(),  // ❌ Use class names!
+    'Bad' => new Bad(),                              // Not lazy
+    Bad::class => fn( $r ) => new Bad(
+        get_option( 'x' )                            // Options cached
+    ),
+    'bad' => fn( $r ) => get_option( 'x' ),          // Scalars not allowed
+    'My_Logger' => fn( $r ) => new Bad(),            // Use ::class
 );
 ```
-
-**Remember:** For dependencies between services, use constructor injection and let autowiring handle it.
-
-## Loading Configuration
-
-WPDI automatically loads `wpdi-config.php` from your plugin/theme directory. No code needed!
 
 ## Summary
 
-- **Keep `wpdi-config.php` minimal** - only interface bindings
-- **Let autowiring handle dependencies** - don't create them in factories
-- **Fetch options in methods** - not in constructors
-- **Conditional logic?** - Use ServiceProvider class, not DI config
+- Keep `wpdi-config.php` minimal - interface bindings only
+- Factories receive `Resolver $r` for dependency resolution
+- Fetch options in methods, not constructors
+- Always use `::class` as service identifier

@@ -1,180 +1,131 @@
-# Getting Started with WPDI
-
-This guide walks you through setting up WPDI in your WordPress plugin, theme, or custom module.
+# Getting Started
 
 ## Installation
 
-### Method 1: Direct Download (Recommended)
-
-1. Download the WPDI library
-2. Extract to your plugin/theme directory
-3. Include the init file:
-
-```php
-require_once __DIR__ . '/wpdi/init.php';
-```
-
-### Method 2: Composer (Optional)
+Via Composer:
 
 ```bash
 composer require stracker-phil/wpdi
 ```
 
-## Your First WPDI Module
+Or, download WPDI and include it in your plugin:
 
-### Step 1: Create the Main Class
+```php
+require_once __DIR__ . '/wpdi/init.php';
+```
+
+## Basic Setup
+
+### 1. Create Your Plugin
 
 ```php
 <?php
 /**
- * Plugin Name: My Sample Plugin
+ * Plugin Name: My Plugin
  */
 
-// Prevent direct access
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
 require_once __DIR__ . '/wpdi/init.php';
 
-class My_Sample_Plugin extends WPDI\Scope {
-    protected function bootstrap(): void {
-        // This is the composition root & main entry point.
-        // Access to the DI services is only allowed in this function.
-        $app = $this->get( Sample_Application::class );
+class My_Plugin extends WPDI\Scope {
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        $app = $r->get( My_Application::class );
         $app->run();
     }
 }
 
-// Initialize the plugin
-new My_Sample_Plugin( __FILE__ );
+new My_Plugin( __FILE__ );
 ```
 
-### Step 2: Create Your Application Class
+### 2. Create Your Application
 
 ```php
 <?php
-// src/Sample_Application.php
+// src/My_Application.php
 
-class Sample_Application {
-    private Sample_Service $service;
-    private Sample_Logger $logger;
-    
-    public function __construct( Sample_Service $service, Sample_Logger $logger ) {
+class My_Application {
+    private My_Service $service;
+
+    public function __construct( My_Service $service ) {
         $this->service = $service;
-        $this->logger = $logger;
     }
-    
+
     public function run(): void {
         add_action( 'init', array( $this, 'on_init' ) );
-        add_action( 'wp_footer', array( $this, 'on_footer' ) );
     }
-    
+
     public function on_init(): void {
-        $this->logger->info( 'Sample plugin initialized' );
-        $this->service->do_something();
-    }
-    
-    public function on_footer(): void {
-        if ( current_user_can( 'manage_options' ) ) {
-            echo '<!-- Sample Plugin Active -->';
-        }
+        $this->service->do_work();
     }
 }
 ```
 
-### Step 3: Create Your Business Logic
+### 3. Create Your Services
 
 ```php
 <?php
-// src/Sample_Service.php
+// src/My_Service.php
 
-class Sample_Service {
-    private Sample_Config $config;
-    private Sample_Logger $logger;
-    
-    public function __construct( Sample_Config $config, Sample_Logger $logger ) {
+class My_Service {
+    private My_Config $config;
+
+    public function __construct( My_Config $config ) {
         $this->config = $config;
-        $this->logger = $logger;
     }
-    
-    public function do_something(): void {
+
+    public function do_work(): void {
         if ( $this->config->is_enabled() ) {
-            $this->logger->info( 'Sample service is doing something!' );
-            // Your business logic here
+            // Business logic
         }
-    }
-    
-    public function get_data(): array {
-        return array(
-            'status' => $this->config->is_enabled() ? 'active' : 'inactive',
-            'version' => $this->config->get_version(),
-        );
     }
 }
 ```
 
 ```php
 <?php
-// src/Sample_Config.php
+// src/My_Config.php
 
-class Sample_Config {
-    private bool $enabled;
-    private string $version;
-    
-    public function __construct( bool $enabled = true, string $version = '1.0.0' ) {
-        $this->enabled = $enabled;
-        $this->version = $version;
-    }
-    
+class My_Config {
     public function is_enabled(): bool {
-        return $this->enabled;
-    }
-    
-    public function get_version(): string {
-        return $this->version;
+        return get_option( 'my_plugin_enabled', true );
     }
 }
 ```
 
-```php
-<?php
-// src/Sample_Logger.php
+## How It Works
 
-class Sample_Logger {
-    private string $prefix;
-    
-    public function __construct( string $prefix = '[Sample Plugin]' ) {
-        $this->prefix = $prefix;
-    }
-    
-    public function info( string $message ): void {
-        if ( WP_DEBUG ) {
-            error_log( $this->prefix . ' ' . $message );
-        }
-    }
-    
-    public function error( string $message ): void {
-        error_log( $this->prefix . ' ERROR: ' . $message );
-    }
-}
+1. **Auto-Discovery** - WPDI scans `src/` for PHP classes
+2. **Autowiring** - Analyzes constructor parameters via reflection
+3. **Dependency Injection** - Instantiates and injects dependencies automatically
+
+## Directory Structure
+
+```
+my-plugin/
+├── my-plugin.php          # Scope class (entry point)
+├── wpdi-config.php        # Optional interface bindings
+├── wpdi/                   # WPDI library
+└── src/                    # Your classes (auto-discovered)
+    ├── My_Application.php
+    ├── My_Service.php
+    └── My_Config.php
 ```
 
-### Step 4: Test Your Setup
+## File Naming (PSR-4)
 
-1. Activate your plugin
-2. Check your debug log (if `WP_DEBUG_LOG` is enabled)
-3. You should see: `[Sample Plugin] Sample plugin initialized`
-4. View page source and look for: `<!-- Sample Plugin Active -->`
+Class names must match file names exactly:
 
-## What Just Happened?
-
-1. **Auto-Discovery**: WPDI automatically found all your classes in `src/`
-2. **Dependency Injection**: It analyzed constructor parameters and injected dependencies
-3. **Type Safety**: PHP's type system ensures correct dependencies are injected
-4. **WordPress Integration**: Your code uses standard WordPress hooks and patterns
+```
+✅ My_Service.php      → class My_Service
+✅ Payment_Gateway.php → class Payment_Gateway
+❌ class-my-service.php (old WP style - not discovered)
+```
 
 ## Next Steps
 
-- [Configuration Guide](configuration.md) - Learn about `wpdi-config.php`
-- [Testing](testing.md) - Unit testing your WPDI classes
+- [Configuration](configuration.md) - Interface bindings
+- [Testing](testing.md) - Unit testing patterns
+- [Troubleshooting](troubleshooting.md) - Common issues

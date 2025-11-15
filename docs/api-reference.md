@@ -1,10 +1,8 @@
 # API Reference
 
-Complete reference for WPDI classes and methods.
-
 ## WPDI\Container
 
-Main dependency injection container (PSR-11 compliant).
+PSR-11 compliant dependency injection container.
 
 ### bind(string $abstract, ?callable $factory = null, bool $singleton = true): void
 
@@ -12,42 +10,42 @@ Register a service.
 
 ```php
 // Auto-wire concrete class
-$container->bind(Payment_Processor::class);
+$container->bind( Payment_Processor::class );
 
 // Interface with factory
-$container->bind(Logger_Interface::class, fn() => new WP_Logger());
+$container->bind( Logger_Interface::class, fn( $r ) => new WP_Logger() );
 
-// Non-singleton (new instance each time)
-$container->bind(Temp_Service::class, null, false);
+// Non-singleton
+$container->bind( Temp_Service::class, null, false );
 ```
-
-**Parameters:**
-
-- `$abstract` - Class or interface name
-- `$factory` - Optional factory function (defaults to autowiring)
-- `$singleton` - Cache instance (default: true)
 
 ### get(string $id): mixed
 
 Retrieve a service (PSR-11).
 
 ```php
-$processor = $container->get(Payment_Processor::class);
+$processor = $container->get( Payment_Processor::class );
 ```
 
-**Throws:**
-
-- `Not_Found_Exception` - Service not found
-- `Container_Exception` - Resolution error
+**Throws:** `Not_Found_Exception`, `Container_Exception`
 
 ### has(string $id): bool
 
-Check if container can provide a service (PSR-11).
+Check if service exists (PSR-11).
 
 ```php
-if ($container->has(Optional_Service::class)) {
-    $service = $container->get(Optional_Service::class);
+if ( $container->has( Optional_Service::class ) ) {
+    $service = $container->get( Optional_Service::class );
 }
+```
+
+### initialize(string $scope_file): void
+
+Initialize with auto-discovery and caching.
+
+```php
+$container = new WPDI\Container();
+$container->initialize( __FILE__ );
 ```
 
 ### load_config(array $config): void
@@ -55,56 +53,64 @@ if ($container->has(Optional_Service::class)) {
 Load service bindings from array.
 
 ```php
-$container->load_config(array(
-    Logger_Interface::class => fn() => new WP_Logger(),
-));
+$container->load_config( array(
+    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+) );
 ```
 
-### initialize(string $base_path): void
+### resolver(): Resolver
 
-Initialize with auto-discovery and caching.
+Get cached Resolver instance with limited API.
 
 ```php
-$container = new WPDI\Container();
-$container->initialize(__DIR__);
+$resolver = $container->resolver();
+$service = $resolver->get( My_Service::class );
 ```
 
 ### get_registered(): array
 
-Get all registered service names (for debugging).
+Get all registered service names (debugging).
 
 ### clear(): void
 
-Clear all bindings and instances (for testing).
+Clear all bindings and instances (testing).
+
+---
 
 ## WPDI\Scope
 
 Base class for WordPress modules.
 
-### bootstrap(): void (abstract)
+### bootstrap(Resolver $resolver): void (abstract)
 
 Composition root - implement in your module.
 
 ```php
 class My_Plugin extends WPDI\Scope {
-    protected function bootstrap(): void {
-        $app = $this->get(My_Application::class);
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        $app = $r->get( My_Application::class );
         $app->run();
     }
 }
+
+new My_Plugin( __FILE__ );
 ```
 
-### get(string $class): mixed (protected)
+---
 
-Get service from container. Only available within Scope.
+## WPDI\Resolver
 
-### has(string $class): bool (protected)
+Limited API wrapper for service resolution. Used by factory functions and `Scope::bootstrap()`.
 
-Check if service exists. Only available within Scope.
+### get(string $id): mixed
 
-### get_base_path(): string (protected)
+Get service by class or interface name.
 
-Get base path for auto-discovery.
+### has(string $id): bool
+
+Check if service exists.
+
+---
 
 ## Exceptions
 
@@ -116,20 +122,13 @@ Base exception for all WPDI errors.
 
 Container errors (PSR-11 `ContainerExceptionInterface`).
 
-**Common causes:**
-
-- Invalid factory function
-- Circular dependencies
-- Reflection errors
+**Causes:** Invalid factory, circular dependencies, reflection errors.
 
 ### Not_Found_Exception
 
 Service not found (PSR-11 `NotFoundExceptionInterface`).
 
-**Common causes:**
-
-- Service not registered or auto-discoverable
-- Class file not in `src/` directory
+**Causes:** Service not registered, class not in `src/`, not auto-discoverable.
 
 ### Circular_Dependency_Exception
 
@@ -137,96 +136,51 @@ Circular constructor dependencies detected.
 
 **Example:** `ServiceA -> ServiceB -> ServiceA`
 
+---
+
 ## Configuration File
 
 ### wpdi-config.php
 
-Optional configuration in module root.
-
-**Structure:**
+Optional configuration in module root. Factories receive a `Resolver` for dependency resolution.
 
 ```php
 <?php
 return array(
-    Interface_Name::class => fn() => new Implementation(),
+    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Cache_Interface::class  => fn( $r ) => new Redis_Cache(
+        $r->get( Logger_Interface::class )
+    ),
 );
 ```
 
-**Factory signature:** `function(): object`
-
-**Examples:**
-
-```php
-return array(
-    // Interface binding
-    Logger_Interface::class => fn() => new WP_Logger(),
-
-    // Another binding
-    Cache_Interface::class => fn() => new Redis_Cache(),
-
-    // That's it - keep it minimal!
-);
-```
-
-**Note:** Factories receive **no arguments** (no container access). For dependencies, use constructor injection and autowiring.
+---
 
 ## Auto-Discovery
 
-WPDI automatically discovers classes that are:
+WPDI discovers classes that are:
 
-- ✅ In `src/` directory (recursive)
-- ✅ Concrete classes (not abstract, interfaces, or traits)
-- ✅ Instantiable (public or no constructor)
-- ✅ Proper PHP class syntax
-
-### File Naming (PSR-4)
+- In `src/` directory (recursive)
+- Concrete (not abstract, interface, or trait)
+- Instantiable (public or no constructor)
+- File name matches class name (PSR-4)
 
 ```
-✅ My_Service.php         (matches class name)
-✅ Payment_Processor.php  (matches class name)
-❌ class-my-service.php   (old WP style - not discovered)
-❌ my-service.php         (doesn't match class name)
+✅ My_Service.php         → class My_Service
+✅ Payment_Processor.php  → class Payment_Processor
+❌ class-my-service.php   → not discovered
 ```
 
-Files must match class names exactly (case-sensitive on most systems).
-
-### Class Naming
-
-Use WordPress conventions with underscores:
-
-```php
-✅ class My_Service {}         // WordPress style
-✅ class Payment_Processor {}  // WordPress style
-⚠️ class MyService {}          // Works but not WordPress style
-```
+---
 
 ## Performance
 
-### Cache Files
+### Cache
 
 - **Location:** `{module}/cache/wpdi-container.php`
-- **When:** Automatically in production
-- **Contains:** Pre-compiled class names
+- **Contains:** Class → filepath mapping
+- **Staleness:** Auto-detected in non-production environments
 
-### Memory
+### Singletons
 
-- **Development:** Classes loaded on-demand via reflection
-- **Production:** Pre-compiled bindings, minimal overhead
-- **Singletons:** Cached per request
-- **Non-singletons:** Created fresh each time
-
-### Best Practices
-
-```php
-// ✅ Lightweight factory
-Simple_Service::class => fn() => new Simple_Service(),
-
-// ❌ Avoid expensive operations
-Heavy_Service::class => function() {
-    $data = expensive_api_call();  // Runs every request!
-    return new Heavy_Service($data);
-},
-
-// ✅ Better - lazy computation
-Heavy_Service::class => fn() => new Heavy_Service(),  // Service handles expensive ops
-```
+Services are cached per request by default. Non-singletons created fresh each time via `bind($class, null, false)`.

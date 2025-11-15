@@ -2,9 +2,9 @@
 
 WPDI includes WP-CLI commands for development and deployment.
 
-## discover
+## wp di discover
 
-Discover and analyze classes without compiling.
+Discover and list classes without compiling.
 
 ```bash
 wp di discover
@@ -15,44 +15,58 @@ wp di discover --format=json
 **Output:**
 
 ```
-+---------------------------+-----------+-------------+
-| class                     | type      | autowirable |
-+---------------------------+-----------+-------------+
-| Payment_Processor         | concrete  | yes         |
-| Payment_Client_Interface  | interface | no          |
-+---------------------------+-----------+-------------+
++---------------------------+----------+-------------+
+| class                     | type     | autowirable |
++---------------------------+----------+-------------+
+| Payment_Processor         | concrete | yes         |
+| Payment_Config            | concrete | yes         |
+| Order_Handler             | concrete | yes         |
++---------------------------+----------+-------------+
 ```
 
-## compile
+**Note:** Only concrete classes are discovered. Interfaces, abstract classes, and traits are filtered out.
 
-Compile container for production performance.
+## wp di compile
+
+Compile container cache for production.
 
 ```bash
 wp di compile
 wp di compile --path=/path/to/plugin
-wp di compile --force  # Force recompilation
+wp di compile --force
 ```
 
 **Output:**
 
 ```
 Discovering classes in /path/to/plugin/src...
-Found 12 classes
-
-✓ Container compiled to cache/wpdi-container.php
-
-Total services: 15
-Autowired: 12
-Manual: 3
+Found 3 classes:
+  - Payment_Processor
+  - Payment_Config
+  - Order_Handler
+Loading configuration from wpdi-config.php...
+Compiling container cache...
+Success: Container compiled successfully to cache/wpdi-container.php
+Total discovered classes: 3
+Manual configurations: 2
+  - Logger_Interface
+  - Cache_Interface
 ```
 
-## clear
+## wp di clear
 
-Clear compiled cache files.
+Clear compiled cache.
 
 ```bash
 wp di clear
 wp di clear --path=/path/to/plugin
+```
+
+**Output:**
+
+```
+Success: Cache cleared: cache/wpdi-container.php
+Success: Removed empty cache directory
 ```
 
 ## Workflows
@@ -63,7 +77,7 @@ wp di clear --path=/path/to/plugin
 # See what WPDI discovers
 wp di discover
 
-# Check for issues
+# Check specific classes
 wp di discover --format=json | jq '.[] | select(.autowirable == "no")'
 ```
 
@@ -73,7 +87,7 @@ wp di discover --format=json | jq '.[] | select(.autowirable == "no")'
 # Compile for production
 wp di compile --force
 
-# Verify
+# Verify cache exists
 ls -la cache/wpdi-container.php
 ```
 
@@ -85,7 +99,17 @@ wp di clear
 wp di discover
 ```
 
-## Deployment Integration
+## Deployment
+
+### GitHub Actions
+
+```yaml
+- name: Compile Container
+  run: wp di compile --force
+
+- name: Verify Cache
+  run: test -f cache/wpdi-container.php || exit 1
+```
 
 ### Plugin Packaging
 
@@ -94,20 +118,10 @@ wp di compile --force
 zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 ```
 
-### GitHub Actions
-
-```yaml
-- name: Compile Container
-  run: wp di compile --force
-
-- name: Verify
-  run: test -f cache/wpdi-container.php || exit 1
-```
-
 ## Options
 
-| Option              | Description                      | Commands |
-|---------------------|----------------------------------|----------|
-| `--path=<path>`     | Specify directory                | all      |
-| `--force`           | Force recompilation              | compile  |
-| `--format=<format>` | Output format (table, json, csv) | discover |
+| Option              | Description                            | Commands |
+|---------------------|----------------------------------------|----------|
+| `--path=<path>`     | Module directory                       | all      |
+| `--force`           | Force recompilation                    | compile  |
+| `--format=<format>` | Output format (table, json, yaml, csv) | discover |
