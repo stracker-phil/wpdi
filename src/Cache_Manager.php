@@ -5,6 +5,9 @@
 
 namespace WPDI;
 
+use ReflectionNamedType;
+use ReflectionClass;
+
 class Cache_Manager {
 	private string $base_path;
 	private string $cache_file;
@@ -209,7 +212,7 @@ class Cache_Manager {
 			return null;
 		}
 
-		$reflection = new \ReflectionClass( $class_name );
+		$reflection = new ReflectionClass( $class_name );
 
 		// Must be instantiable and concrete
 		if ( ! $reflection->isInstantiable() || $reflection->isAbstract() || $reflection->isInterface() ) {
@@ -227,7 +230,7 @@ class Cache_Manager {
 		if ( $constructor ) {
 			foreach ( $constructor->getParameters() as $param ) {
 				$type = $param->getType();
-				if ( $type instanceof \ReflectionNamedType && ! $type->isBuiltin() ) {
+				if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
 					$dependencies[] = $type->getName();
 				}
 			}

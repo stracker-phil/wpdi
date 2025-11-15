@@ -191,4 +191,3 @@ class Auto_Discovery {
 		return $dependencies;
 	}
 }
-
