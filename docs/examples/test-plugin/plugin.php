@@ -13,12 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once __DIR__ . '/vendor/wpdi/init.php';
 
 class Test_Plugin extends WPDI\Scope {
-	protected function bootstrap() : void {
-		// Composition root - only place with container access
-		$app = $this->get( 'Test_Application' );
+	protected function bootstrap( WPDI\Resolver $r ): void {
+		// Composition root - only place with service resolution
+		$app = $r->get( Test_Application::class );
 		$app->run();
 	}
 }
 
 // Initialize the plugin
-new Test_Plugin();
+new Test_Plugin( __FILE__ );

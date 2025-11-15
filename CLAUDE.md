@@ -62,26 +62,38 @@ ddev composer update
 - Config loading from `wpdi-config.php`
 - Circular dependency detection with helpful error messages
 
-**2. Scope (`src/Scope.php`)**
+**2. Resolver (`src/Resolver.php`)**
+
+- Limited API wrapper around Container
+- Exposes only `get()` and `has()` methods
+- Used by factory functions in wpdi-config.php
+- Used by Scope::bootstrap() for consistent API
+- Cached per Container (single instance via Container::resolver())
+
+**3. Scope (`src/Scope.php`)**
 
 - Base class for WordPress modules (plugins/themes)
-- Composition root pattern - only place with container access
-- Calls `bootstrap()` where user resolves root service
+- Composition root pattern - only place with service resolution
+- Constructor takes `$scope_file` (use `__FILE__`), creates Container, initializes it, then calls bootstrap(Resolver)
+- Container is local variable only (not stored as property)
+- bootstrap() receives Resolver with limited API (no direct Container access)
+- Auto-discovery scans `dirname($scope_file) . '/src'` for classes
 
-**3. Auto_Discovery (`src/Auto_Discovery.php`)**
+**4. Auto_Discovery (`src/Auto_Discovery.php`)**
 
 - Scans `src/` directory for concrete classes
 - Tokenizes PHP files to extract namespaces and class names
 - PHP 8+ compatibility: handles `T_NAME_QUALIFIED` token
 - Filters to only instantiable, concrete classes
+- Returns class => filepath mapping for cache staleness detection
 
-**4. Compiler (`src/Compiler.php`)**
+**5. Compiler (`src/Compiler.php`)**
 
-- Caches **discovered class names** (not factory closures)
+- Caches **class => filepath mapping** (not factory closures)
 - Creates `cache/wpdi-container.php` with simple array export
 - Production optimization: skips auto-discovery on cached systems
 
-**5. WP-CLI Commands (`src/Commands/`)**
+**6. WP-CLI Commands (`src/Commands/`)**
 
 - **cli.php** - Registration file that loads and registers all commands
 - **Compile_Command.php** - Compiles container cache for production
@@ -89,7 +101,7 @@ ddev composer update
 - **Clear_Command.php** - Clears compiled cache files
 - Each command follows Single Responsibility Principle
 
-**6. Exception Hierarchy (`src/Exceptions/`)**
+**7. Exception Hierarchy (`src/Exceptions/`)**
 
 ```
 WPDI_Exception (base for all library exceptions)
@@ -128,18 +140,40 @@ Circular_Dependency_Exception: Circular dependency detected: ServiceA -> Service
 **Cache Design:**
 
 ```php
-// Cache contains ONLY class names, not closures
+// Cache contains class => filepath mapping for staleness detection
 return array(
-    'My_Service',
-    'My_Repository',
-    'My_Controller'
+    'My_Service' => '/path/to/src/My_Service.php',
+    'My_Repository' => '/path/to/src/My_Repository.php',
+    'My_Controller' => '/path/to/src/My_Controller.php'
 );
 ```
 
-This avoids Closure serialization (impossible with `var_export()`). On cache load, autowiring factories are recreated via reflection.
+This avoids Closure serialization (impossible with `var_export()`). On cache load, autowiring factories are recreated via reflection. The filepath mapping enables efficient cache staleness detection.
+
+**Resolver Pattern:**
+
+Both factory functions and `Scope::bootstrap()` receive a `Resolver` instance with limited API:
+
+```php
+// wpdi-config.php - factory receives Resolver
+Cache_Interface::class => fn(Resolver $r) => new Redis_Cache(
+    $r->get(Logger_Interface::class)
+)
+
+// Scope::bootstrap() - receives same Resolver type
+protected function bootstrap(Resolver $r): void {
+    $service = $r->get(My_Service::class);
+}
+```
+
+This provides:
+- Consistent API between config factories and bootstrap
+- Limited access (only `get()` and `has()`, no `bind()` or `clear()`)
+- Single cached Resolver instance per Container
+- Explicit dependency resolution without full Container exposure
 
 **Composition Root:**
-The `Scope::bootstrap()` method is the **only** place that accesses the container. Services receive dependencies via constructor injection, never via container access.
+The `Scope::bootstrap()` method is the **only** place that accesses the Resolver. Services receive dependencies via constructor injection, never via service location.
 
 **Exception Handling:**
 Users can catch exceptions at multiple levels depending on their needs:
@@ -288,11 +322,9 @@ Services are singletons by default - the factory runs **once** and the instance 
 ```php
 // wpdi-config.php
 return array(
-    'Payment_Config' => function() {
-        return new Payment_Config(
-            get_option('api_key', '')  // ❌ Called once, cached forever!
-        );
-    },
+    Payment_Config::class => fn( $r ) => new Payment_Config(
+        get_option( 'api_key', '' )  // ❌ Called once, cached forever!
+    ),
 );
 ```
 
@@ -303,15 +335,15 @@ return array(
 
 ✅ **CORRECT**: WordPress coding standard pattern
 ```php
-// wpdi-config.php - just instantiate
+// wpdi-config.php - just instantiate (or let autowiring handle it)
 return array(
-    'Payment_Config' => fn() => new Payment_Config(), // No parameters
+    Payment_Config::class => fn( $r ) => new Payment_Config(),
 );
 
 // Payment_Config.php - class handles option access
 class Payment_Config {
     public function get_api_key(): string {
-        return get_option('api_key', ''); // Fresh value on each call
+        return get_option( 'api_key', '' ); // Fresh value on each call
     }
 }
 ```
@@ -325,10 +357,9 @@ class Payment_Config {
 **Exception**: Interface bindings can use `get_option()` in factory to choose implementation:
 ```php
 // OK: Using option to select which implementation to instantiate
-'API_Client_Interface' => function() {
-    $env = get_option('environment', 'sandbox');
-    return 'live' === $env ? new Live_Client() : new Sandbox_Client();
-},
+API_Client_Interface::class => fn( $r ) => 'live' === get_option( 'environment', 'sandbox' )
+    ? new Live_Client()
+    : new Sandbox_Client(),
 ```
 
 ## Code Modification Guidelines
@@ -347,7 +378,7 @@ class Payment_Config {
 - Test both autowiring and explicit binding paths
 - Avoid defensive checks that type hints make impossible
 - Maintain `$resolving` array cleanup in try-finally blocks for circular dependency detection
-- Ensure `clear()` method resets all state including `$resolving`
+- Ensure `clear()` method resets all state including `$resolving` and `$resolver`
 
 **When modifying Auto_Discovery:**
 
