@@ -178,8 +178,9 @@ WPDI discovers classes that are:
 ### Cache
 
 - **Location:** `{module}/cache/wpdi-container.php`
-- **Contains:** Class → filepath mapping
-- **Staleness:** Auto-detected in non-production environments
+- **Contains:** Class → metadata mapping (path, mtime, dependencies)
+- **Staleness:** Each file's mtime checked in non-production environments
+- **Incremental:** Only modified files re-parsed, new dependencies discovered transitively
 
 ### Singletons
 

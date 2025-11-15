@@ -207,19 +207,26 @@ class AutoDiscoveryTest extends TestCase {
 		$method     = $reflection->getMethod( 'filter_concrete_classes' );
 		$method->setAccessible( true );
 
+		// Create a temporary file for mtime to work
+		$temp_file = sys_get_temp_dir() . '/wpdi_test_' . uniqid() . '.php';
+		file_put_contents( $temp_file, '<?php' );
+
 		// filter_concrete_classes now expects class => filepath mapping
 		$class_map = array(
-			SimpleClass::class    => '/fake/path/SimpleClass.php',    // Concrete - should be included
-			AbstractClass::class  => '/fake/path/AbstractClass.php',  // Abstract - should be excluded
-			LoggerInterface::class => '/fake/path/LoggerInterface.php', // Interface - should be excluded
-			'NonExistent'         => '/fake/path/NonExistent.php',    // Doesn't exist - skipped
-			'stdClass'            => '/fake/path/stdClass.php',       // Internal class - instantiable, included
-			'ArrayObject'         => '/fake/path/ArrayObject.php',    // SPL class - instantiable, included
-			'DateTime'            => '/fake/path/DateTime.php',       // Date/time class - instantiable, included
+			SimpleClass::class     => $temp_file,    // Concrete - should be included
+			AbstractClass::class   => $temp_file,    // Abstract - should be excluded
+			LoggerInterface::class => $temp_file,    // Interface - should be excluded
+			'NonExistent'          => $temp_file,    // Doesn't exist as class - skipped
+			'stdClass'             => $temp_file,    // Internal class - instantiable, included
+			'ArrayObject'          => $temp_file,    // SPL class - instantiable, included
+			'DateTime'             => $temp_file,    // Date/time class - instantiable, included
 		);
 
 		$result = $method->invoke( $discovery, $class_map );
 		$result_classes = array_keys( $result );
+
+		// Cleanup
+		@unlink( $temp_file );
 
 		// Should only include concrete, instantiable classes
 		$this->assertContains( SimpleClass::class, $result_classes );
@@ -230,8 +237,11 @@ class AutoDiscoveryTest extends TestCase {
 		$this->assertNotContains( LoggerInterface::class, $result_classes );
 		$this->assertNotContains( 'NonExistent', $result_classes );
 
-		// The exception handler (lines 121-123) is defensive code for rare edge cases
-		// that are nearly impossible to trigger without PHP extensions or runtime corruption
+		// Verify metadata structure
+		$this->assertArrayHasKey( 'path', $result[ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'mtime', $result[ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'dependencies', $result[ SimpleClass::class ] );
+
 		$this->assertGreaterThan( 0, count( $result ) );
 	}
 

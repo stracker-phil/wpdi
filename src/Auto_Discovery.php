@@ -7,6 +7,7 @@ namespace WPDI;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use ReflectionNamedType;
 
 /**
  * Discovers classes for auto-registration
@@ -15,7 +16,7 @@ class Auto_Discovery {
 	/**
 	 * Discover concrete classes in directory
 	 *
-	 * @return array Array mapping class names to file paths
+	 * @return array Array mapping class names to metadata (path, mtime, dependencies)
 	 */
 	public function discover( string $directory ): array {
 		if ( ! is_dir( $directory ) ) {
@@ -35,7 +36,7 @@ class Auto_Discovery {
 			$file_path          = $file->getPathname();
 			$discovered_classes = $this->extract_classes_from_file( $file_path );
 
-			// Map each class to its file path
+			// Map each class to its file path (temporary, will add metadata later)
 			foreach ( $discovered_classes as $class ) {
 				$class_map[ $class ] = $file_path;
 			}
@@ -119,10 +120,31 @@ class Auto_Discovery {
 	}
 
 	/**
+	 * Parse a single PHP file and return metadata for concrete classes
+	 *
+	 * @param string $file_path Path to PHP file.
+	 * @return array Array mapping class names to metadata (empty if no concrete classes).
+	 */
+	public function parse_file( string $file_path ): array {
+		$classes = $this->extract_classes_from_file( $file_path );
+		if ( empty( $classes ) ) {
+			return array();
+		}
+
+		// Map classes to file path temporarily
+		$class_map = array();
+		foreach ( $classes as $class ) {
+			$class_map[ $class ] = $file_path;
+		}
+
+		return $this->filter_concrete_classes( $class_map );
+	}
+
+	/**
 	 * Filter to only concrete, instantiable classes
 	 *
 	 * @param array $class_map Array mapping class names to file paths
-	 * @return array Filtered array mapping class names to file paths
+	 * @return array Filtered array mapping class names to metadata (path, mtime, dependencies)
 	 */
 	private function filter_concrete_classes( array $class_map ): array {
 		$concrete = array();
@@ -134,10 +156,39 @@ class Auto_Discovery {
 
 			$reflection = new ReflectionClass( $class );
 			if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
-				$concrete[ $class ] = $file_path;
+				$concrete[ $class ] = array(
+					'path'         => $file_path,
+					'mtime'        => filemtime( $file_path ),
+					'dependencies' => $this->extract_dependencies( $reflection ),
+				);
 			}
 		}
 
 		return $concrete;
 	}
+
+	/**
+	 * Extract constructor dependencies from class
+	 *
+	 * @param ReflectionClass $reflection The reflection class instance.
+	 * @return array List of dependency class names.
+	 */
+	private function extract_dependencies( ReflectionClass $reflection ): array {
+		$constructor = $reflection->getConstructor();
+
+		if ( ! $constructor ) {
+			return array();
+		}
+
+		$dependencies = array();
+		foreach ( $constructor->getParameters() as $param ) {
+			$type = $param->getType();
+			if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
+				$dependencies[] = $type->getName();
+			}
+		}
+
+		return $dependencies;
+	}
 }
+

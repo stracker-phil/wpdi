@@ -85,13 +85,15 @@ ddev composer update
 - Tokenizes PHP files to extract namespaces and class names
 - PHP 8+ compatibility: handles `T_NAME_QUALIFIED` token
 - Filters to only instantiable, concrete classes
-- Returns class => filepath mapping for cache staleness detection
+- Returns class => metadata mapping (path, mtime, dependencies)
+- Extracts constructor dependencies via reflection for future optimizations
 
 **5. Compiler (`src/Compiler.php`)**
 
-- Caches **class => filepath mapping** (not factory closures)
+- Caches **class => metadata mapping** (path, mtime, dependencies)
 - Creates `cache/wpdi-container.php` with simple array export
 - Production optimization: skips auto-discovery on cached systems
+- Metadata enables efficient mtime-based staleness detection
 
 **6. WP-CLI Commands (`src/Commands/`)**
 
@@ -140,15 +142,34 @@ Circular_Dependency_Exception: Circular dependency detected: ServiceA -> Service
 **Cache Design:**
 
 ```php
-// Cache contains class => filepath mapping for staleness detection
+// Cache contains class metadata for staleness detection
 return array(
-    'My_Service' => '/path/to/src/My_Service.php',
-    'My_Repository' => '/path/to/src/My_Repository.php',
-    'My_Controller' => '/path/to/src/My_Controller.php'
+    'My_Service' => array(
+        'path'         => '/path/to/src/My_Service.php',
+        'mtime'        => 1234567890,
+        'dependencies' => array( 'My_Repository', 'My_Logger' ),
+    ),
+    'My_Repository' => array(
+        'path'         => '/path/to/src/My_Repository.php',
+        'mtime'        => 1234567891,
+        'dependencies' => array( 'My_Database' ),
+    ),
 );
 ```
 
-This avoids Closure serialization (impossible with `var_export()`). On cache load, autowiring factories are recreated via reflection. The filepath mapping enables efficient cache staleness detection.
+This avoids Closure serialization (impossible with `var_export()`). On cache load, autowiring factories are recreated via reflection. The metadata includes:
+- `path`: File path for existence checking
+- `mtime`: File modification time for staleness detection (avoids checking cache file timestamp)
+- `dependencies`: Constructor dependencies for future optimizations
+
+**Cache Staleness Detection:**
+In non-production environments, each cached file's mtime is compared against the stored value. Incremental updates:
+- **Deleted files**: Removed from cache
+- **Modified files**: Re-parsed individually (no full scan)
+- **New dependencies**: Discovered when referenced by modified files
+- **Unchanged files**: Kept as-is from cache
+
+This avoids full filesystem scans - only modified files are re-parsed, and new dependencies are discovered transitively when existing code references them.
 
 **Resolver Pattern:**
 
@@ -265,7 +286,7 @@ if ( T_STRING === $token_type || T_NS_SEPARATOR === $token_type ||
 ```
 
 **3. Compiler Cache Format**
-The Compiler caches **class names**, not **bindings**. Never try to serialize Closures with `var_export()` - it will fail. The cache is loaded via `Container::load_compiled()` which rebinds classes with autowiring.
+The Compiler caches **class metadata** (path, mtime, dependencies), not **bindings**. Never try to serialize Closures with `var_export()` - it will fail. The cache is loaded via `Container::load_compiled()` which rebinds classes with autowiring. The metadata enables efficient mtime-based staleness detection without checking cache file timestamp.
 
 **4. Container Type Safety**
 `Container::bind()` and `Container::get()` only accept valid class/interface names. They validate with `class_exists()` and `interface_exists()` and throw exceptions for invalid strings. This prevents magic string bugs.
@@ -389,10 +410,11 @@ API_Client_Interface::class => fn( $r ) => 'live' === get_option( 'environment',
 
 **When modifying Compiler:**
 
-- Remember: only cache class names, never Closures
+- Remember: only cache class metadata (path, mtime, dependencies), never Closures
 - Update both `Compiler` and `Container::initialize()` together
-- Test cache file can be `require`'d and returns simple array
+- Test cache file can be `require`'d and returns proper array structure
 - Ensure `var_export()` output is valid PHP 7.4+ syntax
+- Metadata must include: `path`, `mtime`, `dependencies`
 
 **When adding new exceptions:**
 
