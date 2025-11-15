@@ -172,7 +172,7 @@ class Cache_Manager {
 		$to_check = $class_map;
 
 		// Iteratively discover dependencies until no new ones found
-		do {
+		while ( ! empty( $to_check ) ) {
 			$new_deps = array();
 
 			foreach ( $to_check as $metadata ) {
@@ -196,7 +196,7 @@ class Cache_Manager {
 			}
 
 			$to_check = $new_deps;
-		} while ( ! empty( $new_deps ) );
+		}
 
 		return $class_map;
 	}
@@ -204,14 +204,10 @@ class Cache_Manager {
 	/**
 	 * Discover metadata for a single class
 	 *
-	 * @param string $class_name Fully qualified class name.
+	 * @param string $class_name Fully qualified class name (must exist).
 	 * @return array|null Metadata array or null if not discoverable.
 	 */
 	private function discover_single_class( string $class_name ): ?array {
-		if ( ! class_exists( $class_name ) ) {
-			return null;
-		}
-
 		$reflection = new ReflectionClass( $class_name );
 
 		// Must be instantiable and concrete
@@ -227,6 +223,7 @@ class Cache_Manager {
 		// Extract dependencies
 		$dependencies = array();
 		$constructor  = $reflection->getConstructor();
+
 		if ( $constructor ) {
 			foreach ( $constructor->getParameters() as $param ) {
 				$type = $param->getType();
