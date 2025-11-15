@@ -57,7 +57,7 @@ class Compile_Command {
 		}
 
 		WP_CLI::log( 'Found ' . count( $classes ) . ' classes:' );
-		foreach ( $classes as $class ) {
+		foreach ( $classes as $class => $metadata ) {
 			WP_CLI::log( "  - {$class}" );
 		}
 
