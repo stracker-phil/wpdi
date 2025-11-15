@@ -11,6 +11,9 @@ use WPDI\Tests\Fixtures\LoggerInterface;
 use WPDI\Tests\Fixtures\AbstractClass;
 use ReflectionClass;
 
+/**
+ * @covers \WPDI\Auto_Discovery
+ */
 class AutoDiscoveryTest extends TestCase {
 
 	private Auto_Discovery $discovery;
@@ -124,7 +127,7 @@ class AutoDiscoveryTest extends TestCase {
 
 	public function edge_case_scenarios_provider(): array {
 		return array(
-			'non-existent directory' => array(
+			'non-existent directory'            => array(
 				function () {
 					return array( '/non/existent/path', null );
 				},
@@ -132,9 +135,10 @@ class AutoDiscoveryTest extends TestCase {
 					// No cleanup needed
 				},
 			),
-			'file path instead of directory' => array(
+			'file path instead of directory'    => array(
 				function () {
 					$file_path = __DIR__ . '/Fixtures/SimpleClass.php';
+
 					return array( $file_path, null );
 				},
 				function ( $resources ) {
@@ -147,6 +151,7 @@ class AutoDiscoveryTest extends TestCase {
 					mkdir( $temp_dir );
 					$php_file = $temp_dir . '/functions.php';
 					file_put_contents( $php_file, "<?php\nfunction some_function() {}\n" );
+
 					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
 				},
 				function ( $resources ) {
@@ -154,12 +159,13 @@ class AutoDiscoveryTest extends TestCase {
 					rmdir( $resources['dir'] );
 				},
 			),
-			'php file with anonymous class' => array(
+			'php file with anonymous class'     => array(
 				function () {
 					$temp_dir = sys_get_temp_dir() . '/wpdi_test_anon_' . uniqid();
 					mkdir( $temp_dir );
 					$php_file = $temp_dir . '/anonymous.php';
 					file_put_contents( $php_file, "<?php\nnamespace Test;\n\$obj = new class {};" );
+
 					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
 				},
 				function ( $resources ) {
@@ -167,12 +173,13 @@ class AutoDiscoveryTest extends TestCase {
 					rmdir( $resources['dir'] );
 				},
 			),
-			'php file with trait definition' => array(
+			'php file with trait definition'    => array(
 				function () {
 					$temp_dir = sys_get_temp_dir() . '/wpdi_test_trait_' . uniqid();
 					mkdir( $temp_dir );
 					$php_file = $temp_dir . '/MyTrait.php';
 					file_put_contents( $php_file, "<?php\nnamespace Test;\ntrait MyTrait {}\n" );
+
 					return array( $temp_dir, array( 'dir' => $temp_dir, 'file' => $php_file ) );
 				},
 				function ( $resources ) {
@@ -180,10 +187,11 @@ class AutoDiscoveryTest extends TestCase {
 					rmdir( $resources['dir'] );
 				},
 			),
-			'empty directory' => array(
+			'empty directory'                   => array(
 				function () {
 					$temp_dir = sys_get_temp_dir() . '/wpdi_test_empty_' . uniqid();
 					mkdir( $temp_dir );
+
 					return array( $temp_dir, $temp_dir );
 				},
 				function ( $resources ) {
@@ -222,7 +230,7 @@ class AutoDiscoveryTest extends TestCase {
 			'DateTime'             => $temp_file,    // Date/time class - instantiable, included
 		);
 
-		$result = $method->invoke( $discovery, $class_map );
+		$result         = $method->invoke( $discovery, $class_map );
 		$result_classes = array_keys( $result );
 
 		// Cleanup

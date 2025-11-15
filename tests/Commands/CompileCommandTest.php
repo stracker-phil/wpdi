@@ -329,7 +329,7 @@ PHP;
 		chmod( $cache_dir, 0555 );
 
 		// Test if we can actually prevent writing on this system
-		$test_file = $cache_dir . '/test-write.txt';
+		$test_file   = $cache_dir . '/test-write.txt';
 		$test_result = @file_put_contents( $test_file, 'test' );
 
 		if ( false !== $test_result ) {
@@ -339,6 +339,7 @@ PHP;
 			// Add assertion count to indicate we verified the precondition
 			$this->addToAssertionCount( 1 );
 			$this->markTestSkipped( 'Filesystem permissions cannot prevent file writes on this system' );
+
 			return;
 		}
 

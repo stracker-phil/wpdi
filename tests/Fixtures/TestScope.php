@@ -15,7 +15,7 @@ class TestScope extends Scope {
 
 	protected function bootstrap( Resolver $resolver ): void {
 		$this->bootstrap_called = true;
-		$this->resolver = $resolver;
+		$this->resolver         = $resolver;
 
 		// Try to resolve a simple service
 		if ( $resolver->has( SimpleClass::class ) ) {

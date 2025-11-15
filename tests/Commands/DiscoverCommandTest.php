@@ -110,7 +110,7 @@ class DiscoverCommandTest extends TestCase {
 		}
 
 		$command = new Discover_Command();
-		$args = array( 'path' => $this->temp_dir );
+		$args    = array( 'path' => $this->temp_dir );
 		if ( null !== $format_arg ) {
 			$args['format'] = $format_arg;
 		}
@@ -122,7 +122,11 @@ class DiscoverCommandTest extends TestCase {
 		$this->assertNotNull( $format_call, 'format_items should be called' );
 		$this->assertEquals( $expected_format, $format_call['args'][0], 'Output format should match' );
 		$this->assertCount( $class_count, $format_call['args'][1], 'Should discover expected number of classes' );
-		$this->assertEquals( array( 'class', 'type', 'autowirable' ), $format_call['args'][2], 'Should include all required fields' );
+		$this->assertEquals( array(
+			'class',
+			'type',
+			'autowirable',
+		), $format_call['args'][2], 'Should include all required fields' );
 	}
 
 	/**
@@ -306,7 +310,7 @@ PHP;
 		$command = new Discover_Command();
 
 		// Use reflection to access private method
-		$reflection = new \ReflectionClass( $command );
+		$reflection = new ReflectionClass( $command );
 		$method     = $reflection->getMethod( 'get_class_type' );
 		$method->setAccessible( true );
 
@@ -331,7 +335,7 @@ PHP;
 		$command = new Discover_Command();
 
 		// Use reflection to access private method
-		$reflection = new \ReflectionClass( $command );
+		$reflection = new ReflectionClass( $command );
 		$method     = $reflection->getMethod( 'get_class_type' );
 		$method->setAccessible( true );
 
@@ -355,7 +359,7 @@ PHP;
 		$command = new Discover_Command();
 
 		// Use reflection to access private method
-		$reflection = new \ReflectionClass( $command );
+		$reflection = new ReflectionClass( $command );
 		$method     = $reflection->getMethod( 'get_class_type' );
 		$method->setAccessible( true );
 
@@ -375,7 +379,7 @@ PHP;
 		$command = new Discover_Command();
 
 		// Use reflection to access private method
-		$reflection = new \ReflectionClass( $command );
+		$reflection = new ReflectionClass( $command );
 		$method     = $reflection->getMethod( 'is_autowirable' );
 		$method->setAccessible( true );
 
@@ -403,6 +407,7 @@ PHP;
 				// For now, we'll test with a class name that would cause issues
 				try {
 					$reflection = new ReflectionClass( '' ); // Empty string might throw
+
 					return $reflection->isInstantiable() && ! $reflection->isAbstract();
 				} catch ( Exception $e ) {
 					return false;

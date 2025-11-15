@@ -7,6 +7,9 @@ use WPDI\Tests\Fixtures\TestScope;
 use WPDI\Tests\Fixtures\SimpleClass;
 use WPDI\Tests\Fixtures\ClassWithDependency;
 
+/**
+ * @covers \WPDI\Scope
+ */
 class ScopeTest extends TestCase {
 
 	// ========================================
@@ -52,14 +55,14 @@ class ScopeTest extends TestCase {
 		callable $action,
 		callable $assertion
 	): void {
-		$scope = new TestScope( __FILE__ );
+		$scope  = new TestScope( __FILE__ );
 		$result = $action( $scope );
 		$assertion( $result, $this );
 	}
 
 	public function service_resolution_scenarios_provider(): array {
 		return array(
-			'can get service from scope' => array(
+			'can get service from scope'        => array(
 				function ( $scope ) {
 					return $scope->public_get( SimpleClass::class );
 				},
@@ -67,7 +70,7 @@ class ScopeTest extends TestCase {
 					$test->assertInstanceOf( SimpleClass::class, $result );
 				},
 			),
-			'scope autowires dependencies' => array(
+			'scope autowires dependencies'      => array(
 				function ( $scope ) {
 					return $scope->public_get( ClassWithDependency::class );
 				},
@@ -80,6 +83,7 @@ class ScopeTest extends TestCase {
 				function ( $scope ) {
 					$instance1 = $scope->public_get( SimpleClass::class );
 					$instance2 = $scope->public_get( SimpleClass::class );
+
 					return array( $instance1, $instance2 );
 				},
 				function ( $result, $test ) {
@@ -107,7 +111,7 @@ class ScopeTest extends TestCase {
 
 	public function service_availability_provider(): array {
 		return array(
-			'existing class returns true'     => array( SimpleClass::class, true ),
+			'existing class returns true'      => array( SimpleClass::class, true ),
 			'non-existent class returns false' => array( 'NonExistentClass', false ),
 		);
 	}

@@ -80,9 +80,10 @@ class ExceptionsTest extends TestCase {
 
 	public function exception_properties_provider(): array {
 		$previous = new Exception( 'Previous exception' );
+
 		return array(
-			'with message only'               => array( 'Custom error message', 0, null ),
-			'with message and code'           => array( 'Test', 123, null ),
+			'with message only'                => array( 'Custom error message', 0, null ),
+			'with message and code'            => array( 'Test', 123, null ),
 			'with message, code, and previous' => array( 'Current exception', 456, $previous ),
 		);
 	}
@@ -293,15 +294,19 @@ class ExceptionsTest extends TestCase {
 
 	public function exception_hierarchy_provider(): array {
 		return array(
-			'WPDI_Exception is base exception' => array(
+			'WPDI_Exception is base exception'                          => array(
 				WPDI_Exception::class,
 				array( Exception::class ),
 			),
-			'Container_Exception extends WPDI_Exception' => array(
+			'Container_Exception extends WPDI_Exception'                => array(
 				Container_Exception::class,
-				array( WPDI_Exception::class, Exception::class, ContainerExceptionInterface::class ),
+				array(
+					WPDI_Exception::class,
+					Exception::class,
+					ContainerExceptionInterface::class,
+				),
 			),
-			'Not_Found_Exception extends Container_Exception' => array(
+			'Not_Found_Exception extends Container_Exception'           => array(
 				Not_Found_Exception::class,
 				array(
 					Container_Exception::class,
@@ -350,9 +355,9 @@ class ExceptionsTest extends TestCase {
 
 	public function circular_dependency_catch_provider(): array {
 		return array(
-			'can catch as WPDI_Exception'               => array( WPDI_Exception::class ),
-			'can catch as Container_Exception'          => array( Container_Exception::class ),
-			'can catch as ContainerExceptionInterface'  => array( ContainerExceptionInterface::class ),
+			'can catch as WPDI_Exception'              => array( WPDI_Exception::class ),
+			'can catch as Container_Exception'         => array( Container_Exception::class ),
+			'can catch as ContainerExceptionInterface' => array( ContainerExceptionInterface::class ),
 		);
 	}
 
