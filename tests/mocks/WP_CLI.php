@@ -112,7 +112,7 @@ class WP_CLI {
 	/**
 	 * Mock add_command method - does nothing in tests
 	 *
-	 * @param string $name Command name.
+	 * @param string $name     Command name.
 	 * @param mixed  $callable Command handler.
 	 */
 	public static function add_command( string $name, $callable ): void {
@@ -123,4 +123,4 @@ class WP_CLI {
 /**
  * Exception thrown by WP_CLI::error() to simulate exit behavior
  */
-class WP_CLI_Exception extends \Exception {}
+class WP_CLI_Exception extends Exception { }

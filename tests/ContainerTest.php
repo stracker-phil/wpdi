@@ -19,6 +19,9 @@ use WPDI\Tests\Fixtures\ClassWithDefaultValue;
 use WPDI\Tests\Fixtures\CircularA;
 use WPDI\Tests\Fixtures\ClassWithNullableParameter;
 
+/**
+ * @covers \WPDI\Container
+ */
 class ContainerTest extends TestCase {
 
 	private Container $container;
@@ -65,7 +68,8 @@ class ContainerTest extends TestCase {
 	/**
 	 * GIVEN a container with different singleton configurations
 	 * WHEN services are resolved multiple times
-	 * THEN singleton services return the same instance and non-singletons return different instances
+	 * THEN singleton services return the same instance and non-singletons return different
+	 * instances
 	 *
 	 * @dataProvider singleton_behavior_provider
 	 */
@@ -86,7 +90,7 @@ class ContainerTest extends TestCase {
 
 	public function singleton_behavior_provider(): array {
 		return array(
-			'singleton returns same instance'         => array( true, true ),
+			'singleton returns same instance'           => array( true, true ),
 			'non-singleton returns different instances' => array( false, false ),
 		);
 	}
@@ -117,11 +121,11 @@ class ContainerTest extends TestCase {
 
 	public function autowiring_scenarios_provider(): array {
 		return array(
-			'class without constructor' => array(
+			'class without constructor'        => array(
 				SimpleClass::class,
 				null,
 			),
-			'class with single dependency' => array(
+			'class with single dependency'     => array(
 				ClassWithDependency::class,
 				function ( $instance, $test ) {
 					$test->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
@@ -134,14 +138,14 @@ class ContainerTest extends TestCase {
 					$test->assertInstanceOf( ClassWithDependency::class, $instance->get_second() );
 				},
 			),
-			'class with optional dependency' => array(
+			'class with optional dependency'   => array(
 				ClassWithOptionalDependency::class,
 				function ( $instance, $test ) {
 					$test->assertTrue( $instance->has_dependency() );
 					$test->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
 				},
 			),
-			'class with default values' => array(
+			'class with default values'        => array(
 				ClassWithDefaultValue::class,
 				function ( $instance, $test ) {
 					$test->assertEquals( 'default', $instance->get_name() );
@@ -245,7 +249,7 @@ class ContainerTest extends TestCase {
 
 	public function psr11_has_scenarios_provider(): array {
 		return array(
-			'explicitly bound service' => array(
+			'explicitly bound service'    => array(
 				function ( $container ) {
 					$container->bind( SimpleClass::class );
 				},
@@ -257,12 +261,12 @@ class ContainerTest extends TestCase {
 				SimpleClass::class,
 				true,
 			),
-			'non-existent class' => array(
+			'non-existent class'          => array(
 				null,
 				'NonExistentClass',
 				false,
 			),
-			'already resolved instance' => array(
+			'already resolved instance'   => array(
 				function ( $container ) {
 					$container->get( SimpleClass::class );
 				},
@@ -304,7 +308,7 @@ class ContainerTest extends TestCase {
 	public function test_can_load_compiled_classes(): void {
 		// load_compiled expects class => filepath mapping
 		$class_map = array(
-			SimpleClass::class        => '/fake/path/SimpleClass.php',
+			SimpleClass::class         => '/fake/path/SimpleClass.php',
 			ClassWithDependency::class => '/fake/path/ClassWithDependency.php',
 		);
 
@@ -506,14 +510,14 @@ PHP;
 
 	public function exception_scenarios_provider(): array {
 		return array(
-			'invalid class name in bind' => array(
+			'invalid class name in bind'            => array(
 				Container_Exception::class,
 				"'InvalidClass' must be a valid class or interface name",
 				function ( $container ) {
 					$container->bind( 'InvalidClass' );
 				},
 			),
-			'invalid class name in get' => array(
+			'invalid class name in get'             => array(
 				Not_Found_Exception::class,
 				"'invalid-string' must be a valid class or interface name",
 				function ( $container ) {
@@ -534,14 +538,14 @@ PHP;
 					$container->get( ClassWithInterface::class );
 				},
 			),
-			'interface without binding' => array(
+			'interface without binding'             => array(
 				Not_Found_Exception::class,
 				'Service ' . LoggerInterface::class . ' not found',
 				function ( $container ) {
 					$container->get( LoggerInterface::class );
 				},
 			),
-			'unresolvable primitive parameter' => array(
+			'unresolvable primitive parameter'      => array(
 				Container_Exception::class,
 				'Cannot resolve parameter',
 				function ( $container ) {

@@ -200,9 +200,9 @@ class ClearCommandTest extends TestCase {
 	 */
 	public function test_keeps_cache_directory_with_other_files(): void {
 		// Create cache file and another file
-		$cache_dir   = $this->temp_dir . '/cache';
-		$cache_file  = $cache_dir . '/wpdi-container.php';
-		$other_file  = $cache_dir . '/other-file.txt';
+		$cache_dir  = $this->temp_dir . '/cache';
+		$cache_file = $cache_dir . '/wpdi-container.php';
+		$other_file = $cache_dir . '/other-file.txt';
 		mkdir( $cache_dir );
 		file_put_contents( $cache_file, '<?php return array();' );
 		file_put_contents( $other_file, 'other content' );

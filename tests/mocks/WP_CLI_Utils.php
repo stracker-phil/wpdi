@@ -20,6 +20,8 @@
 
 namespace WP_CLI\Utils;
 
+use WP_CLI;
+
 /**
  * Mock format_items function
  *
@@ -32,5 +34,5 @@ namespace WP_CLI\Utils;
  */
 function format_items( string $format, array $items, array $fields ): void {
 	// Track the call in WP_CLI mock for test verification
-	\WP_CLI::track_call( 'format_items', array( $format, $items, $fields ) );
+	WP_CLI::track_call( 'format_items', array( $format, $items, $fields ) );
 }

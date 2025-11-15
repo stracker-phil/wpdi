@@ -5,8 +5,10 @@ namespace WPDI\Tests;
 use PHPUnit\Framework\TestCase;
 use WPDI\Compiler;
 use WPDI\Tests\Fixtures\SimpleClass;
-use WPDI\Tests\Fixtures\LoggerInterface;
 
+/**
+ * @covers \WPDI\Compiler
+ */
 class CompilerTest extends TestCase {
 
 	private Compiler $compiler;
@@ -174,7 +176,7 @@ class CompilerTest extends TestCase {
 
 	public function multiple_classes_provider(): array {
 		return array(
-			'three classes' => array(
+			'three classes'    => array(
 				array(
 					SimpleClass::class,
 					'WPDI\Tests\Fixtures\ArrayLogger',
@@ -182,7 +184,7 @@ class CompilerTest extends TestCase {
 				),
 				3,
 			),
-			'ordered classes' => array(
+			'ordered classes'  => array(
 				array( 'ClassA', 'ClassB', 'ClassC' ),
 				3,
 			),
