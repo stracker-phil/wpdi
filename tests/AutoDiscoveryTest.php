@@ -334,6 +334,118 @@ class GlobalClass_' . uniqid() . ' {
 	}
 
 	// ========================================
+	// parse_file() Tests
+	// ========================================
+
+	/**
+	 * GIVEN a PHP file containing a concrete class
+	 * WHEN parse_file() is called
+	 * THEN it returns metadata for the class with path, mtime, and dependencies
+	 */
+	public function test_parse_file_returns_metadata_for_concrete_class(): void {
+		$reflection = new ReflectionClass( SimpleClass::class );
+		$file_path  = $reflection->getFileName();
+
+		$result = $this->discovery->parse_file( $file_path );
+
+		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayHasKey( 'path', $result[ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'mtime', $result[ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'dependencies', $result[ SimpleClass::class ] );
+		$this->assertSame( $file_path, $result[ SimpleClass::class ]['path'] );
+		$this->assertIsInt( $result[ SimpleClass::class ]['mtime'] );
+		$this->assertIsArray( $result[ SimpleClass::class ]['dependencies'] );
+	}
+
+	/**
+	 * GIVEN a PHP file containing a class with constructor dependencies
+	 * WHEN parse_file() is called
+	 * THEN it extracts the dependency class names
+	 */
+	public function test_parse_file_extracts_dependencies(): void {
+		$reflection = new ReflectionClass( ClassWithDependency::class );
+		$file_path  = $reflection->getFileName();
+
+		$result = $this->discovery->parse_file( $file_path );
+
+		$this->assertArrayHasKey( ClassWithDependency::class, $result );
+		$this->assertContains(
+			SimpleClass::class,
+			$result[ ClassWithDependency::class ]['dependencies']
+		);
+	}
+
+	/**
+	 * GIVEN a PHP file containing no class definition
+	 * WHEN parse_file() is called
+	 * THEN it returns an empty array
+	 */
+	public function test_parse_file_returns_empty_for_no_class(): void {
+		$temp_file = sys_get_temp_dir() . '/wpdi_test_functions_' . uniqid() . '.php';
+		file_put_contents( $temp_file, "<?php\nfunction some_function() { return 1; }\n" );
+
+		$result = $this->discovery->parse_file( $temp_file );
+
+		$this->assertIsArray( $result );
+		$this->assertEmpty( $result );
+
+		unlink( $temp_file );
+	}
+
+	/**
+	 * GIVEN a PHP file containing an interface
+	 * WHEN parse_file() is called
+	 * THEN it returns an empty array (interfaces not instantiable)
+	 */
+	public function test_parse_file_excludes_interfaces(): void {
+		$reflection = new ReflectionClass( LoggerInterface::class );
+		$file_path  = $reflection->getFileName();
+
+		$result = $this->discovery->parse_file( $file_path );
+
+		$this->assertIsArray( $result );
+		$this->assertArrayNotHasKey( LoggerInterface::class, $result );
+	}
+
+	/**
+	 * GIVEN a PHP file containing an abstract class
+	 * WHEN parse_file() is called
+	 * THEN it returns an empty array (abstract classes not instantiable)
+	 */
+	public function test_parse_file_excludes_abstract_classes(): void {
+		$reflection = new ReflectionClass( AbstractClass::class );
+		$file_path  = $reflection->getFileName();
+
+		$result = $this->discovery->parse_file( $file_path );
+
+		$this->assertIsArray( $result );
+		$this->assertArrayNotHasKey( AbstractClass::class, $result );
+	}
+
+	/**
+	 * GIVEN a PHP file containing multiple classes
+	 * WHEN parse_file() is called
+	 * THEN it returns metadata for all concrete classes in the file
+	 */
+	public function test_parse_file_handles_multiple_classes_in_file(): void {
+		$temp_file = sys_get_temp_dir() . '/wpdi_test_multi_' . uniqid() . '.php';
+		$class1    = 'MultiClass1_' . uniqid();
+		$class2    = 'MultiClass2_' . uniqid();
+		$content   = "<?php\nclass {$class1} {}\nclass {$class2} {}\n";
+		file_put_contents( $temp_file, $content );
+		require_once $temp_file;
+
+		$result = $this->discovery->parse_file( $temp_file );
+
+		$this->assertArrayHasKey( $class1, $result );
+		$this->assertArrayHasKey( $class2, $result );
+		$this->assertSame( $temp_file, $result[ $class1 ]['path'] );
+		$this->assertSame( $temp_file, $result[ $class2 ]['path'] );
+
+		unlink( $temp_file );
+	}
+
+	// ========================================
 	// Performance Tests
 	// ========================================
 
