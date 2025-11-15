@@ -10,6 +10,7 @@ require_once __DIR__ . '/src/Exceptions/Not_Found_Exception.php';
 require_once __DIR__ . '/src/Exceptions/Circular_Dependency_Exception.php';
 require_once __DIR__ . '/src/Auto_Discovery.php';
 require_once __DIR__ . '/src/Compiler.php';
+require_once __DIR__ . '/src/Resolver.php';
 require_once __DIR__ . '/src/Container.php';
 require_once __DIR__ . '/src/Scope.php';
 

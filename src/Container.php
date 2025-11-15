@@ -17,6 +17,7 @@ class Container implements ContainerInterface {
 	private array $bindings = array();
 	private array $instances = array();
 	private array $resolving = array();
+	private ?Resolver $resolver = null;
 
 	/**
 	 * Bind a service to the container
@@ -156,7 +157,7 @@ class Container implements ContainerInterface {
 	 */
 	private function resolve_binding( string $abstract ) {
 		$binding  = $this->bindings[ $abstract ];
-		$instance = $binding['factory']();
+		$instance = $binding['factory']( $this->resolver() );
 
 		if ( $binding['singleton'] ) {
 			$this->instances[ $abstract ] = $instance;
@@ -264,6 +265,21 @@ class Container implements ContainerInterface {
 		$this->bindings  = array();
 		$this->instances = array();
 		$this->resolving = array();
+		$this->resolver  = null;
+	}
+
+	/**
+	 * Get the cached resolver instance
+	 *
+	 * Returns a Resolver with limited API (get/has only).
+	 * Used by factory functions and Scope::bootstrap().
+	 */
+	public function resolver(): Resolver {
+		if ( null === $this->resolver ) {
+			$this->resolver = new Resolver( $this );
+		}
+
+		return $this->resolver;
 	}
 
 	/**
