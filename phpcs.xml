@@ -7,7 +7,6 @@
 
     <!-- Check all PHP files -->
     <file>src/</file>
-    <file>init.php</file>
 
     <!-- Exclude vendor directory -->
     <exclude-pattern>vendor/</exclude-pattern>

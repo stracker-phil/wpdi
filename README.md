@@ -17,7 +17,7 @@ Lightweight, WordPress-native dependency injection with auto-discovery and zero 
  * Plugin Name: My Plugin
  */
 
-require_once __DIR__ . '/wpdi/init.php';
+require_once __DIR__ . '/vendor/autoload.php';
 
 class My_Plugin extends WPDI\Scope {
     protected function bootstrap( WPDI\Resolver $r ): void {

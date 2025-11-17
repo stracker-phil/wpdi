@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/vendor/wpdi/init.php';
+require_once __DIR__ . '/vendor/autoload.php';
 
 class Test_Plugin extends WPDI\Scope {
 	protected function bootstrap( WPDI\Resolver $r ): void {

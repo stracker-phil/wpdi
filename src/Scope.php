@@ -4,6 +4,20 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
+require_once __DIR__ . '/Exceptions/Wpdi_Exception.php';
+require_once __DIR__ . '/Exceptions/Container_Exception.php';
+require_once __DIR__ . '/Exceptions/Not_Found_Exception.php';
+require_once __DIR__ . '/Exceptions/Circular_Dependency_Exception.php';
+require_once __DIR__ . '/Auto_Discovery.php';
+require_once __DIR__ . '/Compiler.php';
+require_once __DIR__ . '/Cache_Manager.php';
+require_once __DIR__ . '/Resolver.php';
+require_once __DIR__ . '/Container.php';
+
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once __DIR__ . '/Commands/cli.php';
+}
+
 /**
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
  */

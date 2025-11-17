@@ -238,7 +238,7 @@ try {
 - Tests: `MyServiceTest.php` (PSR-4 style)
 - All files follow PSR-4 naming for better IDE support and autoloading compatibility
 
-**init.php Entry Point:**
+**Scope.php Entry Point:**
 
 - Loads core classes manually (no autoloading)
 - Checks for `ABSPATH` to prevent direct access
@@ -429,6 +429,6 @@ API_Client_Interface::class => fn( $r ) => 'live' === get_option( 'environment',
     - Container-related: extend `Container_Exception`
     - Library-specific: extend `WPDI_Exception`
 - Add tests to `ExceptionsTest.php` verifying the exception hierarchy
-- Update `tests/bootstrap.php` and `init.php` to load new exception file
+- Update `tests/bootstrap.php` and `src/Scope.php` to load new exception file
 - Document common causes and solutions in exception docblock
 - Test exception can be caught at multiple levels (specific type, base class, interface)

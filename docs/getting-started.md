@@ -11,7 +11,7 @@ composer require stracker-phil/wpdi
 Or, download WPDI and include it in your plugin:
 
 ```php
-require_once __DIR__ . '/wpdi/init.php';
+require_once __DIR__ . '/wpdi/src/Scope.php';
 ```
 
 ## Basic Setup
@@ -28,7 +28,11 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-require_once __DIR__ . '/wpdi/init.php';
+// When installed via composer:
+require_once __DIR__ . '/vendor/autoload.php';
+
+// When downloaded into a sub-folder:
+require_once __DIR__ . '/wpdi/src/Scope.php';
 
 class My_Plugin extends WPDI\Scope {
     protected function bootstrap( WPDI\Resolver $r ): void {
