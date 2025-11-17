@@ -1,6 +1,7 @@
 {
   "name": "stracker-phil/wpdi",
   "description": "Truly WordPress-native dependency injection",
+  "version": "1.0.0",
   "license": "GPL-2.0",
   "type": "library",
   "keywords": [
