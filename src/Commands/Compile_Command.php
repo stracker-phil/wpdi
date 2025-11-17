@@ -37,9 +37,9 @@ class Compile_Command {
 			WP_CLI::error( "Directory does not exist: {$path}" );
 		}
 
-		$cache_file = $path . '/cache/wpdi-container.php';
+		$compiler = new Compiler( $path );
 
-		if ( file_exists( $cache_file ) && ! $force ) {
+		if ( $compiler->exists() && ! $force ) {
 			WP_CLI::warning( 'Cache file already exists. Use --force to overwrite.' );
 
 			return;
@@ -72,9 +72,8 @@ class Compile_Command {
 
 		WP_CLI::log( 'Compiling container cache...' );
 
-		$compiler = new Compiler();
-		if ( $compiler->compile( $classes, $cache_file ) ) {
-			WP_CLI::success( "Container compiled successfully to {$cache_file}" );
+		if ( $compiler->write( $classes ) ) {
+			WP_CLI::success( 'Container compiled successfully to ' . $compiler->get_cache_file() );
 
 			// Show statistics
 			WP_CLI::log( 'Total discovered classes: ' . count( $classes ) );

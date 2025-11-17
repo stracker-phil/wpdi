@@ -10,13 +10,13 @@ use ReflectionClass;
 
 class Cache_Manager {
 	private string $base_path;
-	private string $cache_file;
 	private string $src_path;
+	private Compiler $compiler;
 
 	public function __construct( string $base_path ) {
-		$this->base_path  = $base_path;
-		$this->cache_file = $base_path . '/cache/wpdi-container.php';
-		$this->src_path   = $base_path . '/src';
+		$this->base_path = $base_path;
+		$this->src_path  = $base_path . '/src';
+		$this->compiler  = new Compiler( $base_path );
 	}
 
 	/**
@@ -26,11 +26,11 @@ class Cache_Manager {
 	 * @return array Class map (class => metadata).
 	 */
 	public function get_class_map( string $scope_file ): array {
-		if ( ! file_exists( $this->cache_file ) ) {
+		if ( ! $this->compiler->exists() ) {
 			return $this->rebuild_cache();
 		}
 
-		$cached_map = require $this->cache_file;
+		$cached_map = $this->compiler->load();
 
 		if ( 'production' !== wp_get_environment_type() ) {
 			return $this->update_if_stale( $cached_map, $scope_file );
@@ -49,15 +49,15 @@ class Cache_Manager {
 	private function update_if_stale( array $cached_map, string $scope_file ): array {
 		// Invalid cache format? Full rebuild
 		if ( empty( $cached_map ) ) {
-			@unlink( $this->cache_file );
+			$this->compiler->delete();
 
 			return $this->rebuild_cache();
 		}
 
 		// Scope file changed? Full rebuild
-		$cache_time = filemtime( $this->cache_file );
+		$cache_time = $this->compiler->get_mtime();
 		if ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time ) {
-			@unlink( $this->cache_file );
+			$this->compiler->delete();
 
 			return $this->rebuild_cache();
 		}
@@ -65,7 +65,7 @@ class Cache_Manager {
 		// Config file changed? Full rebuild
 		$config_file = $this->base_path . '/wpdi-config.php';
 		if ( file_exists( $config_file ) && filemtime( $config_file ) > $cache_time ) {
-			@unlink( $this->cache_file );
+			$this->compiler->delete();
 
 			return $this->rebuild_cache();
 		}
@@ -87,7 +87,7 @@ class Cache_Manager {
 		foreach ( $cached_map as $class => $metadata ) {
 			// Invalid metadata format? Full rebuild
 			if ( ! is_array( $metadata ) || ! isset( $metadata['path'], $metadata['mtime'] ) ) {
-				@unlink( $this->cache_file );
+				$this->compiler->delete();
 
 				return $this->rebuild_cache();
 			}
@@ -122,7 +122,7 @@ class Cache_Manager {
 
 		// Write updated cache if anything changed
 		if ( $needs_update || count( $updated_map ) !== count( $cached_map ) ) {
-			$this->write_cache( $updated_map );
+			$this->compiler->write( $updated_map );
 		}
 
 		return $updated_map;
@@ -137,19 +137,9 @@ class Cache_Manager {
 		$discovery = new Auto_Discovery();
 		$class_map = $discovery->discover( $this->src_path );
 
-		$this->write_cache( $class_map );
+		$this->compiler->write( $class_map );
 
 		return $class_map;
-	}
-
-	/**
-	 * Write cache file
-	 *
-	 * @param array $class_map Class map to cache.
-	 */
-	private function write_cache( array $class_map ): void {
-		$compiler = new Compiler();
-		$compiler->compile( $class_map, $this->cache_file );
 	}
 
 	/**

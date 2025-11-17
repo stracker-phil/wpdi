@@ -11,13 +11,13 @@ use WPDI\Tests\Fixtures\SimpleClass;
  */
 class CompilerTest extends TestCase {
 
-	private Compiler $compiler;
 	private string $temp_dir;
+	private string $cache_file;
 
 	protected function setUp(): void {
-		$this->compiler = new Compiler();
-		$this->temp_dir = sys_get_temp_dir() . '/wpdi_test_' . uniqid();
+		$this->temp_dir   = sys_get_temp_dir() . '/wpdi_test_' . uniqid();
 		mkdir( $this->temp_dir, 0777, true );
+		$this->cache_file = $this->temp_dir . '/cache/wpdi-container.php';
 	}
 
 	protected function tearDown(): void {
@@ -45,42 +45,150 @@ class CompilerTest extends TestCase {
 	}
 
 	// ========================================
-	// Basic Compilation Tests
+	// Basic File Operations Tests
 	// ========================================
 
 	/**
-	 * GIVEN a list of class names to compile
-	 * WHEN compile() is called with a target file path
+	 * GIVEN a Compiler instance with a base path
+	 * WHEN get_cache_file() is called
+	 * THEN it returns the full cache file path
+	 */
+	public function test_get_cache_file_returns_full_path(): void {
+		$compiler = new Compiler( $this->temp_dir );
+
+		$this->assertEquals( $this->cache_file, $compiler->get_cache_file() );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with a base path
+	 * WHEN exists() is called and the file doesn't exist
+	 * THEN it returns false
+	 */
+	public function test_exists_returns_false_when_file_missing(): void {
+		$compiler = new Compiler( $this->temp_dir );
+
+		$this->assertFalse( $compiler->exists() );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with an existing cache file
+	 * WHEN exists() is called
+	 * THEN it returns true
+	 */
+	public function test_exists_returns_true_when_file_present(): void {
+		mkdir( dirname( $this->cache_file ), 0777, true );
+		file_put_contents( $this->cache_file, '<?php return array();' );
+		$compiler = new Compiler( $this->temp_dir );
+
+		$this->assertTrue( $compiler->exists() );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with an existing cache file
+	 * WHEN get_mtime() is called
+	 * THEN it returns the file modification time
+	 */
+	public function test_get_mtime_returns_file_modification_time(): void {
+		mkdir( dirname( $this->cache_file ), 0777, true );
+		file_put_contents( $this->cache_file, '<?php return array();' );
+		$expected_mtime = filemtime( $this->cache_file );
+		$compiler       = new Compiler( $this->temp_dir );
+
+		$this->assertEquals( $expected_mtime, $compiler->get_mtime() );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with an existing cache file
+	 * WHEN load() is called
+	 * THEN it returns the array from the cache file
+	 */
+	public function test_load_returns_cached_array(): void {
+		$expected = array(
+			'TestClass' => array(
+				'path'         => '/path/to/TestClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
+		mkdir( dirname( $this->cache_file ), 0777, true );
+		file_put_contents( $this->cache_file, '<?php return ' . var_export( $expected, true ) . ';' );
+		$compiler = new Compiler( $this->temp_dir );
+
+		$this->assertEquals( $expected, $compiler->load() );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with an existing cache file
+	 * WHEN delete() is called
+	 * THEN the cache file is removed
+	 */
+	public function test_delete_removes_cache_file(): void {
+		mkdir( dirname( $this->cache_file ), 0777, true );
+		file_put_contents( $this->cache_file, '<?php return array();' );
+		$compiler = new Compiler( $this->temp_dir );
+
+		$compiler->delete();
+
+		$this->assertFileDoesNotExist( $this->cache_file );
+	}
+
+	/**
+	 * GIVEN a Compiler instance with a non-existent cache file
+	 * WHEN delete() is called
+	 * THEN it silently does nothing (no error)
+	 */
+	public function test_delete_handles_missing_file_gracefully(): void {
+		$compiler = new Compiler( $this->temp_dir );
+
+		// Should not throw any errors
+		$compiler->delete();
+
+		$this->assertFileDoesNotExist( $this->cache_file );
+	}
+
+	// ========================================
+	// Write Operation Tests
+	// ========================================
+
+	/**
+	 * GIVEN a class map to write
+	 * WHEN write() is called
 	 * THEN a valid cache file is created at the specified location
 	 */
-	public function test_compile_creates_cache_file(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			SimpleClass::class,
-			'WPDI\Tests\Fixtures\ClassWithDependency',
+	public function test_write_creates_cache_file(): void {
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
 		);
 
-		$result = $this->compiler->compile( $classes, $cache_file );
+		$result = $compiler->write( $class_map );
 
 		$this->assertTrue( $result );
-		$this->assertFileExists( $cache_file );
+		$this->assertFileExists( $this->cache_file );
 	}
 
 	/**
 	 * GIVEN a compiled cache file
 	 * WHEN examining its contents
-	 * THEN it contains valid PHP code that returns an array of class names
+	 * THEN it contains valid PHP code that returns an array
 	 */
-	public function test_compiled_file_contains_valid_php(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			SimpleClass::class,
+	public function test_written_file_contains_valid_php(): void {
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
 		);
 
-		$this->compiler->compile( $classes, $cache_file );
+		$compiler->write( $class_map );
 
-		// File should be valid PHP
-		$content = file_get_contents( $cache_file );
+		$content = file_get_contents( $this->cache_file );
 		$this->assertStringStartsWith( '<?php', $content );
 		$this->assertStringContainsString( 'return', $content );
 	}
@@ -88,44 +196,31 @@ class CompilerTest extends TestCase {
 	/**
 	 * GIVEN a compiled cache file exists
 	 * WHEN the file is required in PHP
-	 * THEN it returns the exact array of class names that was compiled
+	 * THEN it returns the exact class map that was written
 	 */
-	public function test_compiled_file_can_be_required(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			SimpleClass::class,
-			'WPDI\Tests\Fixtures\ClassWithDependency',
+	public function test_written_file_can_be_required(): void {
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class                            => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+			'WPDI\Tests\Fixtures\ClassWithDependency' => array(
+				'path'         => '/path/to/ClassWithDependency.php',
+				'mtime'        => 1234567891,
+				'dependencies' => array( 'SomeDependency' ),
+			),
 		);
 
-		$this->compiler->compile( $classes, $cache_file );
-
-		// Should be able to require the file and get an array of class names
-		$compiled = require $cache_file;
+		$compiler->write( $class_map );
+		$compiled = require $this->cache_file;
 
 		$this->assertIsArray( $compiled );
 		$this->assertCount( 2, $compiled );
-		$this->assertContains( SimpleClass::class, $compiled );
-		$this->assertContains( 'WPDI\Tests\Fixtures\ClassWithDependency', $compiled );
-	}
-
-	/**
-	 * GIVEN a compiled cache file
-	 * WHEN loaded and inspected
-	 * THEN it contains only class names (not closures or complex data structures)
-	 */
-	public function test_compiled_cache_is_simple_array(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array(
-			SimpleClass::class,
-			'WPDI\Tests\Fixtures\ArrayLogger',
-		);
-
-		$this->compiler->compile( $classes, $cache_file );
-		$compiled = require $cache_file;
-
-		// Cache should be a simple indexed array of class names
-		$this->assertIsArray( $compiled );
-		$this->assertEquals( $classes, $compiled );
+		$this->assertArrayHasKey( SimpleClass::class, $compiled );
+		$this->assertArrayHasKey( 'WPDI\Tests\Fixtures\ClassWithDependency', $compiled );
+		$this->assertEquals( $class_map, $compiled );
 	}
 
 	// ========================================
@@ -133,59 +228,72 @@ class CompilerTest extends TestCase {
 	// ========================================
 
 	/**
-	 * GIVEN a cache file path with non-existent parent directories
-	 * WHEN compile() is called
-	 * THEN the necessary directories are created automatically
+	 * GIVEN a base path with non-existent cache directory
+	 * WHEN write() is called
+	 * THEN the cache directory is created automatically
 	 */
-	public function test_compile_creates_cache_directory_if_missing(): void {
-		$nested_dir = $this->temp_dir . '/cache/nested';
-		$cache_file = $nested_dir . '/cache.php';
+	public function test_write_creates_cache_directory_if_missing(): void {
+		$compiler = new Compiler( $this->temp_dir );
 
-		$classes = array( SimpleClass::class );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
 
-		$result = $this->compiler->compile( $classes, $cache_file );
+		$result = $compiler->write( $class_map );
 
 		$this->assertTrue( $result );
-		$this->assertDirectoryExists( $nested_dir );
-		$this->assertFileExists( $cache_file );
+		$this->assertDirectoryExists( dirname( $this->cache_file ) );
+		$this->assertFileExists( $this->cache_file );
 	}
 
 	// ========================================
-	// Multiple Bindings Tests
+	// Multiple Classes Tests
 	// ========================================
 
 	/**
-	 * GIVEN multiple class names to compile
-	 * WHEN the compiler processes them
-	 * THEN all classes are included in the cache in the correct order
+	 * GIVEN multiple classes in the class map
+	 * WHEN the compiler writes them
+	 * THEN all classes are included in the cache
 	 *
 	 * @dataProvider multiple_classes_provider
 	 */
-	public function test_compile_handles_multiple_classes(
-		array $classes,
+	public function test_write_handles_multiple_classes(
+		array $class_map,
 		int $expected_count
 	): void {
-		$cache_file = $this->temp_dir . '/cache.php';
+		$compiler = new Compiler( $this->temp_dir );
 
-		$this->compiler->compile( $classes, $cache_file );
-		$compiled = require $cache_file;
+		$compiler->write( $class_map );
+		$compiled = require $this->cache_file;
 
 		$this->assertCount( $expected_count, $compiled );
-		$this->assertEquals( $classes, $compiled );
+		$this->assertEquals( $class_map, $compiled );
 	}
 
 	public function multiple_classes_provider(): array {
 		return array(
 			'three classes'    => array(
 				array(
-					SimpleClass::class,
-					'WPDI\Tests\Fixtures\ArrayLogger',
-					'WPDI\Tests\Fixtures\ClassWithDependency',
+					SimpleClass::class                       => array(
+						'path'         => '/path/to/SimpleClass.php',
+						'mtime'        => 1234567890,
+						'dependencies' => array(),
+					),
+					'WPDI\Tests\Fixtures\ArrayLogger'        => array(
+						'path'         => '/path/to/ArrayLogger.php',
+						'mtime'        => 1234567891,
+						'dependencies' => array(),
+					),
+					'WPDI\Tests\Fixtures\ClassWithDependency' => array(
+						'path'         => '/path/to/ClassWithDependency.php',
+						'mtime'        => 1234567892,
+						'dependencies' => array( 'SomeDep' ),
+					),
 				),
-				3,
-			),
-			'ordered classes'  => array(
-				array( 'ClassA', 'ClassB', 'ClassC' ),
 				3,
 			),
 			'empty class list' => array(
@@ -204,12 +312,18 @@ class CompilerTest extends TestCase {
 	 * WHEN examining its header comments
 	 * THEN it contains metadata about generation time and class count
 	 */
-	public function test_compiled_file_contains_header_comment(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array( SimpleClass::class );
+	public function test_written_file_contains_header_comment(): void {
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
 
-		$this->compiler->compile( $classes, $cache_file );
-		$content = file_get_contents( $cache_file );
+		$compiler->write( $class_map );
+		$content = file_get_contents( $this->cache_file );
 
 		$this->assertStringContainsString( 'Auto-generated WPDI cache', $content );
 		$this->assertStringContainsString( 'do not edit', $content );
@@ -222,12 +336,18 @@ class CompilerTest extends TestCase {
 	 * WHEN examining its contents
 	 * THEN it includes a timestamp indicating when it was generated
 	 */
-	public function test_compiled_file_includes_timestamp(): void {
-		$cache_file = $this->temp_dir . '/cache.php';
-		$classes    = array( SimpleClass::class );
+	public function test_written_file_includes_timestamp(): void {
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
 
-		$this->compiler->compile( $classes, $cache_file );
-		$content = file_get_contents( $cache_file );
+		$compiler->write( $class_map );
+		$content = file_get_contents( $this->cache_file );
 
 		// Should contain a date in some format
 		$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}/', $content );
@@ -239,27 +359,60 @@ class CompilerTest extends TestCase {
 
 	/**
 	 * GIVEN file system write permissions are denied
-	 * WHEN compile() attempts to write the cache file
+	 * WHEN write() attempts to write the cache file
 	 * THEN it returns false to indicate failure
 	 */
-	public function test_compile_returns_false_on_write_failure(): void {
-		// Create a read-only directory to test write failure
-		$readonly_dir = $this->temp_dir . '/readonly';
-		mkdir( $readonly_dir );
+	public function test_write_returns_false_on_write_failure(): void {
+		// Create cache directory and file, then make file read-only
+		$cache_dir = $this->temp_dir . '/cache';
+		mkdir( $cache_dir );
 
-		// Create a file and make it read-only
-		$cache_file = $readonly_dir . '/cache.php';
+		$cache_file = $cache_dir . '/wpdi-container.php';
 		file_put_contents( $cache_file, '<?php // placeholder' );
 		chmod( $cache_file, 0444 ); // Make file read-only
 
-		$classes = array( SimpleClass::class );
+		$compiler  = new Compiler( $this->temp_dir );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
 
-		// Suppress the expected warning from file_put_contents
-		$result = @$this->compiler->compile( $classes, $cache_file );
+		$result = $compiler->write( $class_map );
 
 		// Clean up - restore permissions before deletion
 		chmod( $cache_file, 0644 );
 
-		$this->assertFalse( $result, 'Compile should return false when file_put_contents fails' );
+		$this->assertFalse( $result, 'Write should return false when file_put_contents fails' );
+	}
+
+	/**
+	 * GIVEN a directory that doesn't exist and can't be created
+	 * WHEN write() is called
+	 * THEN it returns false without throwing errors
+	 */
+	public function test_write_returns_false_when_directory_not_writable(): void {
+		// Create a read-only base directory
+		$readonly_base = $this->temp_dir . '/readonly_base';
+		mkdir( $readonly_base );
+		chmod( $readonly_base, 0555 ); // Read + execute only
+
+		$compiler  = new Compiler( $readonly_base );
+		$class_map = array(
+			SimpleClass::class => array(
+				'path'         => '/path/to/SimpleClass.php',
+				'mtime'        => 1234567890,
+				'dependencies' => array(),
+			),
+		);
+
+		$result = $compiler->write( $class_map );
+
+		// Clean up - restore permissions
+		chmod( $readonly_base, 0755 );
+
+		$this->assertFalse( $result );
 	}
 }
