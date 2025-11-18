@@ -4,10 +4,19 @@ Lightweight, WordPress-native dependency injection with auto-discovery and zero 
 
 ## Features
 
-- **Zero Config** - Autowires concrete classes automatically
+- **Zero Config** - Autowires concrete classes in `src/` folder
+- **Production Ready** - Cached class mapping; only modified files re-scanned during development
 - **WordPress Native** - Follows WordPress coding standards
 - **PSR-11 Compatible** - Standard container interface
-- **Type Safe** - Full type hint support with clear errors
+- **Opinionated** - Limited feature-set by design
+
+## Philosophy
+
+> "Constraint is the feature"
+
+In my experience, DI usually fails in WordPress projects not because they lack features, but because they have too many. It's easy for developers to misuse the container as a global registry, a configuration store, a service locator - all patterns that DI was meant to solve.
+
+WPDI prevents these patterns by design. It does one thing well: wire your classes together automatically. Everything else—configuration, state, WordPress options—stays where it belongs.
 
 ## Quick Start
 
@@ -59,6 +68,16 @@ return array(
         $r->get( Logger_Interface::class )
     ),
 );
+```
+
+## Caching
+
+Autowiring uses reflection to analyze constructor dependencies—but only once. WPDI caches the class mapping and rebuilds it automatically when files change. In production, this means zero overhead: just a single array lookup per service.
+
+For deployment, pre-compile the cache to avoid the initial scan:
+
+```shell
+wp di compile
 ```
 
 ## Requirements
