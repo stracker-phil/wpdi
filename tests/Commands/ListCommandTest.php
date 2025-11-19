@@ -126,6 +126,7 @@ class ListCommandTest extends TestCase {
 			'class',
 			'type',
 			'autowirable',
+			'source',
 		), $format_call['args'][2], 'Should include all required fields' );
 	}
 
@@ -171,7 +172,7 @@ class ListCommandTest extends TestCase {
 		// Verify log was called
 		$log_calls = $this->getWpCliCalls( 'log' );
 		$this->assertCount( 1, $log_calls );
-		$this->assertStringContainsString( 'No classes found', $log_calls[0]['args'][0] );
+		$this->assertStringContainsString( 'No services found', $log_calls[0]['args'][0] );
 	}
 
 	/**
@@ -229,6 +230,59 @@ class ListCommandTest extends TestCase {
 		} finally {
 			chdir( $original_cwd );
 		}
+	}
+
+	/**
+	 * GIVEN classes in src/ and entries in wpdi-config.php
+	 * WHEN listing
+	 * THEN should show both with correct source values
+	 */
+	public function test_includes_config_entries_with_source_column(): void {
+		// Create a discovered class
+		$this->createTestClass( 'My_Service' );
+
+		// Create wpdi-config.php with interface binding
+		$config_content = <<<'PHP'
+<?php
+return array(
+	'Logger_Interface' => fn( $r ) => new stdClass(),
+);
+PHP;
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config_content );
+
+		$command = new List_Command();
+		$command->__invoke(
+			array(),
+			array( 'path' => $this->temp_dir )
+		);
+
+		// Verify format_items was called
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call, 'format_items should be called' );
+
+		$items = $format_call['args'][1];
+
+		// Should have 2 items: one from src/, one from config
+		$this->assertCount( 2, $items, 'Should list both discovered and configured services' );
+
+		// Find items by class name
+		$src_item    = null;
+		$config_item = null;
+		foreach ( $items as $item ) {
+			if ( 'My_Service' === $item['class'] ) {
+				$src_item = $item;
+			} elseif ( 'Logger_Interface' === $item['class'] ) {
+				$config_item = $item;
+			}
+		}
+
+		// Verify discovered class
+		$this->assertNotNull( $src_item, 'Should include discovered class' );
+		$this->assertEquals( 'src', $src_item['source'], 'Discovered class should have source "src"' );
+
+		// Verify configured service
+		$this->assertNotNull( $config_item, 'Should include configured service' );
+		$this->assertEquals( 'config', $config_item['source'], 'Configured service should have source "config"' );
 	}
 
 	/**
@@ -322,13 +376,11 @@ PHP;
 	/**
 	 * GIVEN interface class
 	 * WHEN checking class type
-	 * THEN should return 'unknown' (because class_exists() returns false for interfaces)
+	 * THEN should return 'interface'
 	 *
-	 * Tests get_class_type() behavior with interfaces. In PHP, class_exists()
-	 * returns false for interfaces, so they are reported as 'unknown'.
-	 * The isInterface() check in the code is defensive but unreachable.
+	 * Tests get_class_type() behavior with interfaces.
 	 */
-	public function test_get_class_type_returns_unknown_for_interface(): void {
+	public function test_get_class_type_returns_interface_for_interface(): void {
 		// Create interface
 		$this->createInterface( 'Test_Interface_For_Type' );
 
@@ -341,8 +393,7 @@ PHP;
 
 		$result = $method->invoke( $command, 'Test_Interface_For_Type' );
 
-		// Interfaces return 'unknown' because class_exists() returns false for them
-		$this->assertEquals( 'unknown', $result );
+		$this->assertEquals( 'interface', $result );
 	}
 
 	/**

@@ -15,16 +15,17 @@ wp di list --format=json
 **Output:**
 
 ```
-+---------------------------+----------+-------------+
-| class                     | type     | autowirable |
-+---------------------------+----------+-------------+
-| Payment_Processor         | concrete | yes         |
-| Payment_Config            | concrete | yes         |
-| Order_Handler             | concrete | yes         |
-+---------------------------+----------+-------------+
++-------------------+----------+-------------+--------+
+| class             | type     | autowirable | source |
++-------------------+----------+-------------+--------+
+| Payment_Processor | concrete | yes         | src    |
+| Payment_Config    | concrete | yes         | src    |
+| Logger_Interface  | interface| no          | config |
+| Cache_Interface   | interface| no          | config |
++-------------------+----------+-------------+--------+
 ```
 
-**Note:** Only concrete classes are discovered. Interfaces, abstract classes, and traits are filtered out.
+**Source column:** `src` = auto-discovered from `src/` folder, `config` = defined in `wpdi-config.php`.
 
 ## wp di compile
 

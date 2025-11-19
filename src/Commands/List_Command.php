@@ -38,25 +38,42 @@ class List_Command {
 			WP_CLI::error( "Directory does not exist: {$path}" );
 		}
 
+		$output = array();
+
+		// Discover classes from src/
 		$discovery = new Auto_Discovery();
 		$classes   = $discovery->discover( $path . '/src' );
 
-		if ( empty( $classes ) ) {
-			WP_CLI::log( "No classes found in {$path}/src" );
-
-			return;
-		}
-
-		$output = array();
-		foreach ( $classes as $class => $file_path ) {
+		foreach ( $classes as $class => $metadata ) {
 			$output[] = array(
 				'class'       => $class,
 				'type'        => $this->get_class_type( $class ),
 				'autowirable' => $this->is_autowirable( $class ) ? 'yes' : 'no',
+				'source'      => 'src',
 			);
 		}
 
-		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable' ) );
+		// Load configured services from wpdi-config.php
+		$config_file = $path . '/wpdi-config.php';
+		if ( file_exists( $config_file ) ) {
+			$config = require $config_file;
+			foreach ( array_keys( $config ) as $class ) {
+				$output[] = array(
+					'class'       => $class,
+					'type'        => $this->get_class_type( $class ),
+					'autowirable' => $this->is_autowirable( $class ) ? 'yes' : 'no',
+					'source'      => 'config',
+				);
+			}
+		}
+
+		if ( empty( $output ) ) {
+			WP_CLI::log( "No services found in {$path}" );
+
+			return;
+		}
+
+		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
 	}
 
 	/**
@@ -66,15 +83,15 @@ class List_Command {
 	 * @return string Class type (interface, abstract, concrete, unknown).
 	 */
 	private function get_class_type( string $class ): string {
+		if ( interface_exists( $class ) ) {
+			return 'interface';
+		}
+
 		if ( ! class_exists( $class ) ) {
 			return 'unknown';
 		}
 
 		$reflection = new ReflectionClass( $class );
-
-		if ( $reflection->isInterface() ) {
-			return 'interface';
-		}
 
 		if ( $reflection->isAbstract() ) {
 			return 'abstract';
