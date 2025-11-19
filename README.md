@@ -58,7 +58,7 @@ class My_Application {
 
 ## Configuration (Optional)
 
-For interface bindings, create `wpdi-config.php`:
+For interface bindings or classes outside `src/` (e.g., Composer packages), create `wpdi-config.php`:
 
 ```php
 <?php

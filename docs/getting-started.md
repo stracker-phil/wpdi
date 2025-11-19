@@ -110,7 +110,7 @@ class My_Config {
 ```
 my-plugin/
 ├── my-plugin.php          # Scope class (entry point)
-├── wpdi-config.php        # Optional interface bindings
+├── wpdi-config.php        # Optional: interface bindings, external classes
 ├── wpdi/                   # WPDI library
 └── src/                    # Your classes (auto-discovered)
     ├── My_Application.php

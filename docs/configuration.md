@@ -1,6 +1,6 @@
 # Configuration
 
-WPDI works with zero configuration for concrete classes. You only need `wpdi-config.php` for interface bindings.
+WPDI works with zero configuration for concrete classes in `src/`. You only need `wpdi-config.php` for interface bindings or classes outside `src/` (e.g., Composer packages).
 
 ## Basic Usage
 
@@ -107,7 +107,7 @@ return array(
 
 ## Summary
 
-- Keep `wpdi-config.php` minimal - interface bindings only
+- Keep `wpdi-config.php` minimal - interface bindings and external classes only
 - Factories receive `Resolver $r` for dependency resolution
 - Fetch options in methods, not constructors
 - Always use `::class` as service identifier

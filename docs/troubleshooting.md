@@ -103,33 +103,32 @@ my-plugin/
     └── wpdi-config.php    # ❌ Wrong
 ```
 
-## WordPress Functions Unavailable
+## Cache Not Writable
 
-**Error:** `Call to undefined function get_option()`
+**Error:** `Cache directory is not writable: /path/to/plugin/cache`
 
-Initialize after WordPress loads:
+The `cache/` folder needs _write_ permissions. If using a docker environment, ensure the cache folder is mounted with `:rw` permissions.
 
-```php
-// ❌ Too early
-new My_Plugin( __FILE__ );
+**DDEV**
 
-// ✅ Wait for WordPress
-add_action( 'plugins_loaded', fn() => new My_Plugin( __FILE__ ) );
+In DDEV with read-only plugin mounts, add a writable mount for the cache directory in `.ddev/docker-compose.*.yaml`:
+
+```yaml
+services:
+  web:
+    volumes:
+      - ../:/var/www/html/.ddev/wordpress/wp-content/plugins/${DDEV_PROJECT}:ro
+      - ../cache:/var/www/html/.ddev/wordpress/wp-content/plugins/${DDEV_PROJECT}/cache:rw
 ```
 
 ## Debugging
 
 ```bash
 # See discovered classes
-wp di discover --format=json
+wp di discover
 
 # Clear cache
 wp di clear
-
-# Check registered services
-$container = new WPDI\Container();
-$container->initialize( __FILE__ );
-error_log( print_r( $container->get_registered(), true ) );
 ```
 
 ## Quick Checklist
@@ -140,3 +139,4 @@ error_log( print_r( $container->get_registered(), true ) );
 - [ ] No circular dependencies?
 - [ ] Not passing options to constructors?
 - [ ] Container initialized after `plugins_loaded`?
+- [ ] Cache folder writable?
