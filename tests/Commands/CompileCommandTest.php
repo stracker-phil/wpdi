@@ -358,7 +358,7 @@ PHP;
 			// Verify error was called
 			$error_calls = $this->getWpCliCalls( 'error' );
 			$this->assertCount( 1, $error_calls );
-			$this->assertStringContainsString( 'Failed to compile', $error_calls[0]['args'][0] );
+			$this->assertStringContainsString( 'not writable', $error_calls[0]['args'][0] );
 
 			// Restore permissions before cleanup
 			chmod( $cache_dir, 0777 );

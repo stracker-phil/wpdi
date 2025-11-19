@@ -39,6 +39,11 @@ class Compile_Command {
 
 		$compiler = new Compiler( $path );
 
+		// Check cache directory is writable before doing any work
+		if ( ! $compiler->ensure_dir() ) {
+			WP_CLI::error( "Cache directory is not writable: {$path}/cache\nEnsure the directory exists and has write permissions." );
+		}
+
 		if ( $compiler->exists() && ! $force ) {
 			WP_CLI::warning( 'Cache file already exists. Use --force to overwrite.' );
 
