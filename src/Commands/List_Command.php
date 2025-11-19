@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-CLI command for discovering WPDI classes
+ * WP-CLI command for listing WPDI services
  */
 
 namespace WPDI\Commands;
@@ -11,11 +11,11 @@ use Exception;
 use ReflectionClass;
 
 /**
- * Discover classes without compiling
+ * List services without compiling
  */
-class Discover_Command {
+class List_Command {
 	/**
-	 * Discover and list classes
+	 * List all injectable services
 	 *
 	 * ## OPTIONS
 	 *
@@ -27,8 +27,8 @@ class Discover_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp di discover
-	 *     wp di discover --path=/path/to/module --format=json
+	 *     wp di list
+	 *     wp di list --path=/path/to/module --format=json
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$path   = $assoc_args['path'] ?? getcwd();

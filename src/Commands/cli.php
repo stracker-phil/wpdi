@@ -16,10 +16,10 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 
 // Load individual command classes
 require_once __DIR__ . '/Compile_Command.php';
-require_once __DIR__ . '/Discover_Command.php';
+require_once __DIR__ . '/List_Command.php';
 require_once __DIR__ . '/Clear_Command.php';
 
 // Register commands with WP-CLI
 WP_CLI::add_command( 'di compile', __NAMESPACE__ . '\\Compile_Command' );
-WP_CLI::add_command( 'di discover', __NAMESPACE__ . '\\Discover_Command' );
+WP_CLI::add_command( 'di list', __NAMESPACE__ . '\\List_Command' );
 WP_CLI::add_command( 'di clear', __NAMESPACE__ . '\\Clear_Command' );

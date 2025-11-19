@@ -1,15 +1,15 @@
 <?php
 /**
- * Tests for Discover_Command
+ * Tests for List_Command
  */
 
 use PHPUnit\Framework\TestCase;
-use WPDI\Commands\Discover_Command;
+use WPDI\Commands\List_Command;
 
 /**
- * Test Discover_Command behavior
+ * Test List_Command behavior
  */
-class DiscoverCommandTest extends TestCase {
+class ListCommandTest extends TestCase {
 	/**
 	 * Temporary directory for tests
 	 */
@@ -94,7 +94,7 @@ class DiscoverCommandTest extends TestCase {
 	}
 
 	/**
-	 * GIVEN classes to discover
+	 * GIVEN classes to list
 	 * WHEN using different output formats
 	 * THEN should format output correctly
 	 *
@@ -109,7 +109,7 @@ class DiscoverCommandTest extends TestCase {
 			$this->createTestClass( 'Test_Service' );
 		}
 
-		$command = new Discover_Command();
+		$command = new List_Command();
 		$args    = array( 'path' => $this->temp_dir );
 		if ( null !== $format_arg ) {
 			$args['format'] = $format_arg;
@@ -121,7 +121,7 @@ class DiscoverCommandTest extends TestCase {
 		$format_call = $this->getFormatItemsCall();
 		$this->assertNotNull( $format_call, 'format_items should be called' );
 		$this->assertEquals( $expected_format, $format_call['args'][0], 'Output format should match' );
-		$this->assertCount( $class_count, $format_call['args'][1], 'Should discover expected number of classes' );
+		$this->assertCount( $class_count, $format_call['args'][1], 'Should list expected number of classes' );
 		$this->assertEquals( array(
 			'class',
 			'type',
@@ -131,11 +131,11 @@ class DiscoverCommandTest extends TestCase {
 
 	/**
 	 * GIVEN an invalid directory path
-	 * WHEN attempting to discover
+	 * WHEN attempting to list
 	 * THEN should show error and exit
 	 */
 	public function test_shows_error_for_invalid_directory(): void {
-		$command = new Discover_Command();
+		$command = new List_Command();
 
 		// WP_CLI::error() throws exception to simulate exit
 		$this->expectException( 'WP_CLI_Exception' );
@@ -158,11 +158,11 @@ class DiscoverCommandTest extends TestCase {
 
 	/**
 	 * GIVEN a directory with no classes
-	 * WHEN discovering
+	 * WHEN listing
 	 * THEN should show log message
 	 */
 	public function test_shows_log_message_when_no_classes_found(): void {
-		$command = new Discover_Command();
+		$command = new List_Command();
 		$command->__invoke(
 			array(),
 			array( 'path' => $this->temp_dir )
@@ -176,7 +176,7 @@ class DiscoverCommandTest extends TestCase {
 
 	/**
 	 * GIVEN concrete, interface, and abstract classes
-	 * WHEN discovering
+	 * WHEN listing
 	 * THEN should identify class types and autowirability correctly
 	 */
 	public function test_identifies_class_metadata_correctly(): void {
@@ -185,7 +185,7 @@ class DiscoverCommandTest extends TestCase {
 		$this->createInterface( 'Service_Interface' );
 		$this->createAbstractClass( 'Abstract_Service' );
 
-		$command = new Discover_Command();
+		$command = new List_Command();
 		$command->__invoke(
 			array(),
 			array( 'path' => $this->temp_dir )
@@ -197,8 +197,8 @@ class DiscoverCommandTest extends TestCase {
 
 		$items = $format_call['args'][1];
 
-		// Only concrete class should be discovered (Auto_Discovery filters out interfaces/abstracts)
-		$this->assertCount( 1, $items, 'Only concrete classes should be discovered' );
+		// Only concrete class should be listed (Auto_Discovery filters out interfaces/abstracts)
+		$this->assertCount( 1, $items, 'Only concrete classes should be listed' );
 		$this->assertEquals( 'Concrete_Service', $items[0]['class'], 'Should contain concrete class' );
 		$this->assertEquals( 'concrete', $items[0]['type'], 'Class type should be concrete' );
 		$this->assertEquals( 'yes', $items[0]['autowirable'], 'Concrete class should be autowirable' );
@@ -206,7 +206,7 @@ class DiscoverCommandTest extends TestCase {
 
 	/**
 	 * GIVEN no path argument provided
-	 * WHEN discovering
+	 * WHEN listing
 	 * THEN should use current working directory
 	 */
 	public function test_uses_current_directory_when_no_path_provided(): void {
@@ -218,13 +218,13 @@ class DiscoverCommandTest extends TestCase {
 		chdir( $this->temp_dir );
 
 		try {
-			$command = new Discover_Command();
+			$command = new List_Command();
 			$command->__invoke( array(), array() );
 
-			// Verify discovery succeeded by checking format_items call
+			// Verify listing succeeded by checking format_items call
 			$format_call = $this->getFormatItemsCall();
 			$this->assertNotNull( $format_call, 'format_items should be called when classes are found' );
-			$this->assertCount( 1, $format_call['args'][1], 'Should discover class in current directory' );
+			$this->assertCount( 1, $format_call['args'][1], 'Should list class in current directory' );
 			$this->assertEquals( 'Test_Service', $format_call['args'][1][0]['class'], 'Should find the test class' );
 		} finally {
 			chdir( $original_cwd );
@@ -307,7 +307,7 @@ PHP;
 	 * Tests the defensive code in get_class_type() for classes that don't exist.
 	 */
 	public function test_get_class_type_returns_unknown_for_nonexistent_class(): void {
-		$command = new Discover_Command();
+		$command = new List_Command();
 
 		// Use reflection to access private method
 		$reflection = new ReflectionClass( $command );
@@ -332,7 +332,7 @@ PHP;
 		// Create interface
 		$this->createInterface( 'Test_Interface_For_Type' );
 
-		$command = new Discover_Command();
+		$command = new List_Command();
 
 		// Use reflection to access private method
 		$reflection = new ReflectionClass( $command );
@@ -356,7 +356,7 @@ PHP;
 		// Create abstract class
 		$this->createAbstractClass( 'Test_Abstract_For_Type' );
 
-		$command = new Discover_Command();
+		$command = new List_Command();
 
 		// Use reflection to access private method
 		$reflection = new ReflectionClass( $command );
@@ -376,7 +376,7 @@ PHP;
 	 * Tests the defensive code in is_autowirable() for classes that don't exist.
 	 */
 	public function test_is_autowirable_returns_false_for_nonexistent_class(): void {
-		$command = new Discover_Command();
+		$command = new List_Command();
 
 		// Use reflection to access private method
 		$reflection = new ReflectionClass( $command );
@@ -399,7 +399,7 @@ PHP;
 	 */
 	public function test_is_autowirable_handles_reflection_exceptions(): void {
 		// Create a mock command class that overrides is_autowirable to simulate exception
-		$command = new class() extends Discover_Command {
+		$command = new class() extends List_Command {
 			public function test_is_autowirable_with_exception( string $class ): bool {
 				// Call parent's private method via reflection, but with invalid input
 				// Actually, we can't easily trigger ReflectionClass to throw exception

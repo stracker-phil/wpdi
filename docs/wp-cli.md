@@ -2,14 +2,14 @@
 
 WPDI includes WP-CLI commands for development and deployment.
 
-## wp di discover
+## wp di list
 
-Discover and list classes without compiling.
+List all injectable services without compiling.
 
 ```bash
-wp di discover
-wp di discover --path=/path/to/plugin
-wp di discover --format=json
+wp di list
+wp di list --path=/path/to/plugin
+wp di list --format=json
 ```
 
 **Output:**
@@ -74,11 +74,11 @@ Success: Removed empty cache directory
 ### Development
 
 ```bash
-# See what WPDI discovers
-wp di discover
+# See what WPDI finds
+wp di list
 
 # Check specific classes
-wp di discover --format=json | jq '.[] | select(.autowirable == "no")'
+wp di list --format=json | jq '.[] | select(.autowirable == "no")'
 ```
 
 ### Pre-Deployment
@@ -94,9 +94,9 @@ ls -la cache/wpdi-container.php
 ### Debugging
 
 ```bash
-# Clear and rediscover
+# Clear and re-list
 wp di clear
-wp di discover
+wp di list
 ```
 
 ## Deployment
@@ -124,4 +124,4 @@ zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 |---------------------|----------------------------------------|----------|
 | `--path=<path>`     | Module directory                       | all      |
 | `--force`           | Force recompilation                    | compile  |
-| `--format=<format>` | Output format (table, json, yaml, csv) | discover |
+| `--format=<format>` | Output format (table, json, yaml, csv) | list     |

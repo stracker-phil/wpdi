@@ -10,7 +10,7 @@
 - File name doesn't match class name (must be `My_Service.php`)
 - Class is abstract, interface, or trait
 
-**Fix:** Check with `wp di discover`
+**Fix:** Check with `wp di list`
 
 ## Interface Not Bound
 
@@ -124,8 +124,8 @@ services:
 ## Debugging
 
 ```bash
-# See discovered classes
-wp di discover
+# See all services
+wp di list
 
 # Clear cache
 wp di clear
