@@ -6,13 +6,31 @@ WPDI includes WP-CLI commands for development and deployment.
 
 List all injectable services without compiling.
 
+**Synopsis:**
+
 ```bash
-wp di list
-wp di list --path=/path/to/plugin
-wp di list --format=json
+wp di list [--path=<path>] [--format=<format>]
 ```
 
-**Output:**
+**Options:**
+
+- `--path=<path>` - Module directory (default: current directory)
+- `--format=<format>` - Output format (default: table)
+    - `table` - ASCII table
+    - `json` - JSON array
+    - `csv` - Comma-separated values
+    - `yaml` - YAML format
+
+**Output columns:**
+
+| Column        | Description                                                                                |
+|---------------|--------------------------------------------------------------------------------------------|
+| `class`       | Fully-qualified class or interface name                                                    |
+| `type`        | `concrete`, `interface`, `abstract`, or `unknown`                                          |
+| `autowirable` | `yes` = can be instantiated automatically; `no` = requires factory (interfaces, abstracts) |
+| `source`      | `src` = auto-discovered from `src/`; `config` = defined in `wpdi-config.php`               |
+
+**Example:**
 
 ```
 +-------------------+----------+-------------+--------+
@@ -25,19 +43,22 @@ wp di list --format=json
 +-------------------+----------+-------------+--------+
 ```
 
-**Source column:** `src` = auto-discovered from `src/` folder, `config` = defined in `wpdi-config.php`.
-
 ## wp di compile
 
 Compile container cache for production.
 
+**Synopsis:**
+
 ```bash
-wp di compile
-wp di compile --path=/path/to/plugin
-wp di compile --force
+wp di compile [--path=<path>] [--force]
 ```
 
-**Output:**
+**Options:**
+
+- `--path=<path>` - Module directory (default: current directory)
+- `--force` - Overwrite existing cache file
+
+**Example:**
 
 ```
 Discovering classes in /path/to/plugin/src...
@@ -58,12 +79,17 @@ Manual configurations: 2
 
 Clear compiled cache.
 
+**Synopsis:**
+
 ```bash
-wp di clear
-wp di clear --path=/path/to/plugin
+wp di clear [--path=<path>]
 ```
 
-**Output:**
+**Options:**
+
+- `--path=<path>` - Module directory (default: current directory)
+
+**Example:**
 
 ```
 Success: Cache cleared: cache/wpdi-container.php
@@ -118,11 +144,3 @@ wp di list
 wp di compile --force
 zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 ```
-
-## Options
-
-| Option              | Description                            | Commands |
-|---------------------|----------------------------------------|----------|
-| `--path=<path>`     | Module directory                       | all      |
-| `--force`           | Force recompilation                    | compile  |
-| `--format=<format>` | Output format (table, json, yaml, csv) | list     |
