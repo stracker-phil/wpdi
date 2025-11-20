@@ -419,6 +419,10 @@ class ContainerTest extends TestCase {
 			if ( file_exists( $cache_file ) ) {
 				unlink( $cache_file );
 			}
+			$gitignore_file = $temp_dir . '/cache/.gitignore';
+			if ( file_exists( $gitignore_file ) ) {
+				unlink( $gitignore_file );
+			}
 			rmdir( $temp_dir . '/cache' );
 		}
 		rmdir( $temp_dir );
@@ -472,6 +476,10 @@ PHP;
 
 		// Cleanup
 		unlink( $cache_file );
+		$gitignore_file = $temp_dir . '/cache/.gitignore';
+		if ( file_exists( $gitignore_file ) ) {
+			unlink( $gitignore_file );
+		}
 		unlink( $dest_class );
 		unlink( $scope_file );
 		rmdir( $temp_dir . '/cache' );

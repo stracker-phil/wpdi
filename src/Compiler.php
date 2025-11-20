@@ -79,6 +79,12 @@ class Compiler {
 			@wp_mkdir_p( $this->cache_dir );
 		}
 
+		// Create .gitignore to prevent committing cache files
+		$gitignore = $this->cache_dir . '/.gitignore';
+		if ( ! file_exists( $gitignore ) ) {
+			@file_put_contents( $gitignore, "# WPDI cache - rebuild with: wp di compile\nwpdi-container.php\n" );
+		}
+
 		return is_dir( $this->cache_dir ) && is_writable( $this->cache_dir );
 	}
 
