@@ -42,12 +42,26 @@ class Compiler {
 	/**
 	 * Load cached class map from file
 	 *
+	 * Returns empty array if cache file doesn't exist or is corrupted.
+	 * This allows the container to initialize even with a broken cache.
+	 *
 	 * @return array Cached class map
 	 */
 	public function load(): array {
 		$this->ensure_dir();
 
-		return require $this->cache_file;
+		if ( ! file_exists( $this->cache_file ) ) {
+			return array();
+		}
+
+		$result = require $this->cache_file;
+
+		// Handle corrupted cache file (invalid return value)
+		if ( ! is_array( $result ) ) {
+			return array();
+		}
+
+		return $result;
 	}
 
 	/**

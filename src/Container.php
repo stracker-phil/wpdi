@@ -92,6 +92,9 @@ class Container implements ContainerInterface {
 	/**
 	 * Load compiled class list from cache
 	 *
+	 * Skips stale entries (classes that no longer exist after refactoring).
+	 * The cache will be rebuilt on next compile or when staleness is detected.
+	 *
 	 * @param array $class_map Array mapping class names to metadata (path, mtime, dependencies)
 	 */
 	public function load_compiled( array $class_map ): void {
@@ -101,7 +104,12 @@ class Container implements ContainerInterface {
 				continue;
 			}
 
-			$this->bind( $class );
+			try {
+				$this->bind( $class );
+			} catch ( Container_Exception $e ) {
+				// Skip stale cache entries (classes that no longer exist)
+				continue;
+			}
 		}
 	}
 
