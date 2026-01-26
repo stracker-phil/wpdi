@@ -6,13 +6,17 @@ namespace WPDI;
 
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use ReflectionClass;
-use ReflectionNamedType;
 
 /**
  * Discovers classes for auto-registration
  */
 class Auto_Discovery {
+	private Class_Inspector $inspector;
+
+	public function __construct( ?Class_Inspector $inspector = null ) {
+		$this->inspector = $inspector ?? new Class_Inspector();
+	}
+
 	/**
 	 * Discover concrete classes in directory
 	 *
@@ -154,40 +158,12 @@ class Auto_Discovery {
 				continue;
 			}
 
-			$reflection = new ReflectionClass( $class );
-			if ( $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface() ) {
-				$concrete[ $class ] = array(
-					'path'         => $file_path,
-					'mtime'        => filemtime( $file_path ),
-					'dependencies' => $this->extract_dependencies( $reflection ),
-				);
+			$metadata = $this->inspector->get_metadata( $class, $file_path );
+			if ( $metadata ) {
+				$concrete[ $class ] = $metadata;
 			}
 		}
 
 		return $concrete;
-	}
-
-	/**
-	 * Extract constructor dependencies from class
-	 *
-	 * @param ReflectionClass $reflection The reflection class instance.
-	 * @return array List of dependency class names.
-	 */
-	private function extract_dependencies( ReflectionClass $reflection ): array {
-		$constructor = $reflection->getConstructor();
-
-		if ( ! $constructor ) {
-			return array();
-		}
-
-		$dependencies = array();
-		foreach ( $constructor->getParameters() as $param ) {
-			$type = $param->getType();
-			if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
-				$dependencies[] = $type->getName();
-			}
-		}
-
-		return $dependencies;
 	}
 }

@@ -8,6 +8,7 @@ require_once __DIR__ . '/Exceptions/Wpdi_Exception.php';
 require_once __DIR__ . '/Exceptions/Container_Exception.php';
 require_once __DIR__ . '/Exceptions/Not_Found_Exception.php';
 require_once __DIR__ . '/Exceptions/Circular_Dependency_Exception.php';
+require_once __DIR__ . '/Class_Inspector.php';
 require_once __DIR__ . '/Auto_Discovery.php';
 require_once __DIR__ . '/Compiler.php';
 require_once __DIR__ . '/Cache_Manager.php';

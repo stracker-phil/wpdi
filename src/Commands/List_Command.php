@@ -7,13 +7,17 @@ namespace WPDI\Commands;
 
 use WP_CLI;
 use WPDI\Auto_Discovery;
-use Exception;
-use ReflectionClass;
+use WPDI\Class_Inspector;
 
 /**
  * List services without compiling
  */
 class List_Command {
+	private Class_Inspector $inspector;
+
+	public function __construct() {
+		$this->inspector = new Class_Inspector();
+	}
 	/**
 	 * List all injectable services
 	 *
@@ -47,8 +51,8 @@ class List_Command {
 		foreach ( $classes as $class => $metadata ) {
 			$output[] = array(
 				'class'       => $class,
-				'type'        => $this->get_class_type( $class ),
-				'autowirable' => $this->is_autowirable( $class ) ? 'yes' : 'no',
+				'type'        => $this->inspector->get_type( $class ),
+				'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
 				'source'      => 'src',
 			);
 		}
@@ -60,8 +64,8 @@ class List_Command {
 			foreach ( array_keys( $config ) as $class ) {
 				$output[] = array(
 					'class'       => $class,
-					'type'        => $this->get_class_type( $class ),
-					'autowirable' => $this->is_autowirable( $class ) ? 'yes' : 'no',
+					'type'        => $this->inspector->get_type( $class ),
+					'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
 					'source'      => 'config',
 				);
 			}
@@ -74,49 +78,5 @@ class List_Command {
 		}
 
 		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
-	}
-
-	/**
-	 * Get human-readable class type
-	 *
-	 * @param string $class Fully-qualified class name.
-	 * @return string Class type (interface, abstract, concrete, unknown).
-	 */
-	private function get_class_type( string $class ): string {
-		if ( interface_exists( $class ) ) {
-			return 'interface';
-		}
-
-		if ( ! class_exists( $class ) ) {
-			return 'unknown';
-		}
-
-		$reflection = new ReflectionClass( $class );
-
-		if ( $reflection->isAbstract() ) {
-			return 'abstract';
-		}
-
-		return 'concrete';
-	}
-
-	/**
-	 * Check if class is autowirable
-	 *
-	 * @param string $class Fully-qualified class name.
-	 * @return bool True if class can be autowired.
-	 */
-	private function is_autowirable( string $class ): bool {
-		if ( ! class_exists( $class ) ) {
-			return false;
-		}
-
-		try {
-			$reflection = new ReflectionClass( $class );
-
-			return $reflection->isInstantiable() && ! $reflection->isAbstract();
-		} catch ( Exception $e ) {
-			return false;
-		}
 	}
 }

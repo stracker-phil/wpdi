@@ -53,6 +53,7 @@ require_once dirname( __DIR__ ) . '/src/Exceptions/Wpdi_Exception.php';
 require_once dirname( __DIR__ ) . '/src/Exceptions/Container_Exception.php';
 require_once dirname( __DIR__ ) . '/src/Exceptions/Not_Found_Exception.php';
 require_once dirname( __DIR__ ) . '/src/Exceptions/Circular_Dependency_Exception.php';
+require_once dirname( __DIR__ ) . '/src/Class_Inspector.php';
 require_once dirname( __DIR__ ) . '/src/Auto_Discovery.php';
 require_once dirname( __DIR__ ) . '/src/Compiler.php';
 require_once dirname( __DIR__ ) . '/src/Cache_Manager.php';

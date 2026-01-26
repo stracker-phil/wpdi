@@ -5,18 +5,17 @@
 
 namespace WPDI;
 
-use ReflectionNamedType;
-use ReflectionClass;
-
 class Cache_Manager {
 	private string $base_path;
 	private string $src_path;
 	private Compiler $compiler;
+	private Class_Inspector $inspector;
 
-	public function __construct( string $base_path ) {
+	public function __construct( string $base_path, ?Class_Inspector $inspector = null ) {
 		$this->base_path = $base_path;
 		$this->src_path  = $base_path . '/src';
 		$this->compiler  = new Compiler( $base_path );
+		$this->inspector = $inspector ?? new Class_Inspector();
 	}
 
 	/**
@@ -198,35 +197,6 @@ class Cache_Manager {
 	 * @return array|null Metadata array or null if not discoverable.
 	 */
 	private function discover_single_class( string $class_name ): ?array {
-		$reflection = new ReflectionClass( $class_name );
-
-		// Must be instantiable and concrete
-		if ( ! $reflection->isInstantiable() || $reflection->isAbstract() || $reflection->isInterface() ) {
-			return null;
-		}
-
-		$file_path = $reflection->getFileName();
-		if ( ! $file_path ) {
-			return null; // Internal class
-		}
-
-		// Extract dependencies
-		$dependencies = array();
-		$constructor  = $reflection->getConstructor();
-
-		if ( $constructor ) {
-			foreach ( $constructor->getParameters() as $param ) {
-				$type = $param->getType();
-				if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
-					$dependencies[] = $type->getName();
-				}
-			}
-		}
-
-		return array(
-			'path'         => $file_path,
-			'mtime'        => filemtime( $file_path ),
-			'dependencies' => $dependencies,
-		);
+		return $this->inspector->get_metadata_from_reflection( $class_name );
 	}
 }
