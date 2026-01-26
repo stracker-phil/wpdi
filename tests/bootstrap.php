@@ -48,18 +48,20 @@ if ( ! function_exists( 'current_time' ) ) {
 	}
 }
 
-// Load WPDI core files (since init.php has WordPress checks)
-require_once dirname( __DIR__ ) . '/src/Exceptions/Wpdi_Exception.php';
-require_once dirname( __DIR__ ) . '/src/Exceptions/Container_Exception.php';
-require_once dirname( __DIR__ ) . '/src/Exceptions/Not_Found_Exception.php';
-require_once dirname( __DIR__ ) . '/src/Exceptions/Circular_Dependency_Exception.php';
-require_once dirname( __DIR__ ) . '/src/Class_Inspector.php';
-require_once dirname( __DIR__ ) . '/src/Auto_Discovery.php';
-require_once dirname( __DIR__ ) . '/src/Compiler.php';
-require_once dirname( __DIR__ ) . '/src/Cache_Manager.php';
-require_once dirname( __DIR__ ) . '/src/Resolver.php';
-require_once dirname( __DIR__ ) . '/src/Container.php';
-require_once dirname( __DIR__ ) . '/src/Scope.php';
+if ( ! function_exists( 'wp_die' ) ) {
+	function wp_die( string $message = '', string $title = '', array $args = array() ): void {
+		// Mock for testing - just throw exception so tests can catch it
+		throw new RuntimeException( $message, $args['response'] ?? 500 );
+	}
+}
+
+if ( ! function_exists( 'esc_html' ) ) {
+	function esc_html( string $text ): string {
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+// WPDI files are autoloaded by Composer - no manual requires needed
 
 // Load WP_CLI mocks
 require_once __DIR__ . '/mocks/WP_CLI.php';

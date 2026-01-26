@@ -4,6 +4,8 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
+require_once __DIR__ . '/version-check.php';
+
 require_once __DIR__ . '/Exceptions/Wpdi_Exception.php';
 require_once __DIR__ . '/Exceptions/Container_Exception.php';
 require_once __DIR__ . '/Exceptions/Not_Found_Exception.php';
