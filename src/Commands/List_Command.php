@@ -26,6 +26,9 @@ class List_Command {
 	 * [--path=<path>]
 	 * : Path to module directory (default: current directory)
 	 *
+	 * [--autowiring-paths=<paths>]
+	 * : Comma-separated autowiring paths relative to module (default: src)
+	 *
 	 * [--format=<format>]
 	 * : Output format (table, json, yaml, csv) (default: table)
 	 *
@@ -33,10 +36,12 @@ class List_Command {
 	 *
 	 *     wp di list
 	 *     wp di list --path=/path/to/module --format=json
+	 *     wp di list --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path   = $assoc_args['path'] ?? getcwd();
-		$format = $assoc_args['format'] ?? 'table';
+		$path             = $assoc_args['path'] ?? getcwd();
+		$format           = $assoc_args['format'] ?? 'table';
+		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
 		if ( ! is_dir( $path ) ) {
 			WP_CLI::error( "Directory does not exist: {$path}" );
@@ -44,9 +49,20 @@ class List_Command {
 
 		$output = array();
 
-		// Discover classes from src/
+		// Discover classes from autowiring paths
 		$discovery = new Auto_Discovery();
-		$classes   = $discovery->discover( $path . '/src' );
+		$classes   = array();
+
+		foreach ( $autowiring_paths as $autowiring_path ) {
+			$full_path = $path . '/' . $autowiring_path;
+
+			if ( ! is_dir( $full_path ) ) {
+				continue; // Skip non-existent paths silently in list command
+			}
+
+			$discovered = $discovery->discover( $full_path );
+			$classes    = array_merge( $classes, $discovered );
+		}
 
 		foreach ( $classes as $class => $metadata ) {
 			$output[] = array(
@@ -78,5 +94,21 @@ class List_Command {
 		}
 
 		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+	}
+
+	/**
+	 * Parse autowiring paths from command arguments
+	 *
+	 * @param array $assoc_args Associative arguments from WP-CLI.
+	 * @return array Autowiring paths.
+	 */
+	private function parse_autowiring_paths( array $assoc_args ): array {
+		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
+			return array( 'src' ); // Default
+		}
+
+		$paths = explode( ',', $assoc_args['autowiring-paths'] );
+
+		return array_map( 'trim', $paths );
 	}
 }

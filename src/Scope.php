@@ -24,13 +24,27 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
  */
 abstract class Scope {
 	/**
+	 * Define paths for autowiring class discovery
+	 *
+	 * Override to specify where autowirable classes are located.
+	 * Paths are relative to the scope file directory.
+	 *
+	 * Return an empty array to disable auto-discovery (manual bindings only).
+	 *
+	 * @return array Relative directory paths (e.g., ['src', 'modules/auth/src'])
+	 */
+	protected function autowiring_paths(): array {
+		return array( 'src' );
+	}
+
+	/**
 	 * Initialize the module
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
 	public function __construct( string $scope_file ) {
 		$container = new Container();
-		$container->initialize( $scope_file );
+		$container->initialize( $scope_file, $this->autowiring_paths() );
 		$this->bootstrap( $container->resolver() );
 	}
 

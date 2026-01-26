@@ -7,15 +7,41 @@ namespace WPDI;
 
 class Cache_Manager {
 	private string $base_path;
-	private string $src_path;
+	private array $autowiring_paths;
 	private Compiler $compiler;
 	private Class_Inspector $inspector;
 
-	public function __construct( string $base_path, ?Class_Inspector $inspector = null ) {
-		$this->base_path = $base_path;
-		$this->src_path  = $base_path . '/src';
-		$this->compiler  = new Compiler( $base_path );
-		$this->inspector = $inspector ?? new Class_Inspector();
+	public function __construct( string $base_path, array $autowiring_paths = array( 'src' ), ?Class_Inspector $inspector = null ) {
+		$this->base_path        = $base_path;
+		$this->autowiring_paths = $this->normalize_paths( $base_path, $autowiring_paths );
+		$this->compiler         = new Compiler( $base_path );
+		$this->inspector        = $inspector ?? new Class_Inspector();
+	}
+
+	/**
+	 * Normalize relative paths to absolute paths
+	 *
+	 * @param string $base_path Base directory.
+	 * @param array  $paths Relative paths.
+	 * @return array Absolute paths with trailing slashes removed.
+	 */
+	private function normalize_paths( string $base_path, array $paths ): array {
+		$normalized = array();
+
+		foreach ( $paths as $path ) {
+			// Remove any .. to prevent traversal
+			$path = str_replace( '..', '', $path );
+
+			// Convert relative to absolute
+			$absolute = $base_path . '/' . ltrim( $path, '/' );
+
+			// Remove trailing slash
+			$absolute = rtrim( $absolute, '/' );
+
+			$normalized[] = $absolute;
+		}
+
+		return $normalized;
 	}
 
 	/**
@@ -134,7 +160,19 @@ class Cache_Manager {
 	 */
 	private function rebuild_cache(): array {
 		$discovery = new Auto_Discovery();
-		$class_map = $discovery->discover( $this->src_path );
+		$class_map = array();
+
+		// Discover classes from each autowiring path
+		foreach ( $this->autowiring_paths as $path ) {
+			if ( ! is_dir( $path ) ) {
+				continue; // Skip non-existent paths silently
+			}
+
+			$discovered = $discovery->discover( $path );
+
+			// Merge with existing, later paths override earlier ones
+			$class_map = array_merge( $class_map, $discovered );
+		}
 
 		$this->compiler->write( $class_map );
 

@@ -117,8 +117,9 @@ class Container implements ContainerInterface {
 	 * Initialize container with auto-discovery
 	 *
 	 * @param string $scope_file Path to the Scope implementation file (e.g., __FILE__)
+	 * @param array  $autowiring_paths Relative paths to scan for autowirable classes (relative to dirname($scope_file))
 	 */
-	public function initialize( string $scope_file ): void {
+	public function initialize( string $scope_file, array $autowiring_paths = array( 'src' ) ): void {
 		$base_path   = dirname( $scope_file );
 		$config_file = $base_path . '/wpdi-config.php';
 
@@ -128,7 +129,7 @@ class Container implements ContainerInterface {
 		}
 
 		// Delegate cache management
-		$cache_manager = new Cache_Manager( $base_path );
+		$cache_manager = new Cache_Manager( $base_path, $autowiring_paths );
 		$class_map     = $cache_manager->get_class_map( $scope_file );
 
 		$this->load_compiled( $class_map );

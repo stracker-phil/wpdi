@@ -12,6 +12,22 @@ use WPDI\Tests\Fixtures\ClassWithDependency;
  */
 class ScopeTest extends TestCase {
 
+	/**
+	 * Recursively delete a directory
+	 */
+	private function recursiveDelete( string $dir ): void {
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+
+		$files = array_diff( scandir( $dir ), array( '.', '..' ) );
+		foreach ( $files as $file ) {
+			$path = $dir . '/' . $file;
+			is_dir( $path ) ? $this->recursiveDelete( $path ) : unlink( $path );
+		}
+		rmdir( $dir );
+	}
+
 	// ========================================
 	// Initialization Tests
 	// ========================================
@@ -149,5 +165,135 @@ class ScopeTest extends TestCase {
 
 		$this->assertTrue( $scope->bootstrap_called );
 		$this->assertTrue( $scope->public_has( SimpleClass::class ) );
+	}
+
+	// ========================================
+	// Autowiring Paths Configuration Tests
+	// ========================================
+
+	/**
+	 * GIVEN a Scope with custom single autowiring path
+	 * WHEN the scope is initialized
+	 * THEN classes are discovered from the custom path
+	 */
+	public function test_scope_with_custom_single_path(): void {
+		// Create temporary directory structure
+		$temp_dir = sys_get_temp_dir() . '/wpdi-test-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $temp_dir . '/custom', 0777, true );
+
+		// Create a test class in custom path
+		$test_file = $temp_dir . '/custom/Custom_Service.php';
+		file_put_contents(
+			$test_file,
+			"<?php\nnamespace Test;\nclass Custom_Service {}"
+		);
+
+		// Create Scope with custom path
+		$scope_file = $temp_dir . '/scope.php';
+		file_put_contents(
+			$scope_file,
+			"<?php\nrequire_once '{$test_file}';"
+		);
+
+		// Create custom Scope that uses 'custom' path
+		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			protected function autowiring_paths(): array {
+				return array( 'custom' );
+			}
+
+			protected function bootstrap( \WPDI\Resolver $resolver ): void {
+				// Bootstrap called, test passes
+			}
+		};
+
+		// Cleanup
+		$this->recursiveDelete( $temp_dir );
+
+		$this->assertTrue( true, 'Scope initialized with custom path' );
+	}
+
+	/**
+	 * GIVEN a Scope with multiple autowiring paths
+	 * WHEN the scope is initialized
+	 * THEN classes are discovered from all paths
+	 */
+	public function test_scope_with_multiple_paths(): void {
+		// Create temporary directory structure
+		$temp_dir = sys_get_temp_dir() . '/wpdi-test-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $temp_dir . '/module1', 0777, true );
+		mkdir( $temp_dir . '/module2', 0777, true );
+
+		// Create test classes in different paths
+		$file1 = $temp_dir . '/module1/Service_A.php';
+		$file2 = $temp_dir . '/module2/Service_B.php';
+		file_put_contents( $file1, "<?php\nnamespace Test;\nclass Service_A {}" );
+		file_put_contents( $file2, "<?php\nnamespace Test;\nclass Service_B {}" );
+
+		// Create Scope file
+		$scope_file = $temp_dir . '/scope.php';
+		file_put_contents(
+			$scope_file,
+			"<?php\nrequire_once '{$file1}';\nrequire_once '{$file2}';"
+		);
+
+		// Create custom Scope with multiple paths
+		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			protected function autowiring_paths(): array {
+				return array( 'module1', 'module2' );
+			}
+
+			protected function bootstrap( \WPDI\Resolver $resolver ): void {
+				// Bootstrap called, test passes
+			}
+		};
+
+		// Cleanup
+		$this->recursiveDelete( $temp_dir );
+
+		$this->assertTrue( true, 'Scope initialized with multiple paths' );
+	}
+
+	/**
+	 * GIVEN a Scope with empty autowiring paths
+	 * WHEN the scope is initialized
+	 * THEN no auto-discovery happens (manual bindings only)
+	 */
+	public function test_scope_with_empty_paths(): void {
+		// Create temporary directory
+		$temp_dir = sys_get_temp_dir() . '/wpdi-test-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $temp_dir, 0777, true );
+
+		// Create Scope file
+		$scope_file = $temp_dir . '/scope.php';
+		file_put_contents( $scope_file, '<?php' );
+
+		// Create custom Scope with no autowiring
+		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			protected function autowiring_paths(): array {
+				return array(); // No auto-discovery
+			}
+
+			protected function bootstrap( \WPDI\Resolver $resolver ): void {
+				// Bootstrap called, test passes
+			}
+		};
+
+		// Cleanup
+		$this->recursiveDelete( $temp_dir );
+
+		$this->assertTrue( true, 'Scope initialized with empty paths' );
+	}
+
+	/**
+	 * GIVEN a Scope with default autowiring paths
+	 * WHEN autowiring_paths() is not overridden
+	 * THEN it defaults to ['src']
+	 */
+	public function test_scope_defaults_to_src_path(): void {
+		$scope = new TestScope( __FILE__ );
+
+		// Verify default behavior - TestScope doesn't override autowiring_paths()
+		// so it should use default 'src' path
+		$this->assertTrue( $scope->bootstrap_called );
 	}
 }

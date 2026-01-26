@@ -252,7 +252,6 @@ PHP;
 
 		// Verify progress messages appear in order
 		$this->assertStringContainsString( 'Discovering classes', $log_messages[0], 'First message should be discovery' );
-		$this->assertStringContainsString( 'Found', $log_messages[1], 'Second message should show count' );
 		$this->assertStringContainsString( 'Compiling container cache', $all_logs, 'Should show compilation step' );
 		$this->assertStringContainsString( 'Total discovered classes', $all_logs, 'Should show summary' );
 	}

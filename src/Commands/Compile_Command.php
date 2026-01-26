@@ -21,6 +21,9 @@ class Compile_Command {
 	 * [--path=<path>]
 	 * : Path to module directory (default: current directory)
 	 *
+	 * [--autowiring-paths=<paths>]
+	 * : Comma-separated autowiring paths relative to module (default: src)
+	 *
 	 * [--force]
 	 * : Force recompilation even if cache exists
 	 *
@@ -28,10 +31,12 @@ class Compile_Command {
 	 *
 	 *     wp di compile
 	 *     wp di compile --path=/path/to/module --force
+	 *     wp di compile --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path  = $assoc_args['path'] ?? getcwd();
-		$force = isset( $assoc_args['force'] );
+		$path            = $assoc_args['path'] ?? getcwd();
+		$force           = isset( $assoc_args['force'] );
+		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
 		if ( ! is_dir( $path ) ) {
 			WP_CLI::error( "Directory does not exist: {$path}" );
@@ -50,10 +55,26 @@ class Compile_Command {
 			return;
 		}
 
-		WP_CLI::log( "Discovering classes in {$path}/src..." );
+		WP_CLI::log( 'Discovering classes in:' );
+		foreach ( $autowiring_paths as $autowiring_path ) {
+			WP_CLI::log( "  - {$path}/{$autowiring_path}" );
+		}
 
 		$discovery = new Auto_Discovery();
-		$classes   = $discovery->discover( $path . '/src' );
+		$classes   = array();
+
+		// Discover from each autowiring path
+		foreach ( $autowiring_paths as $autowiring_path ) {
+			$full_path = $path . '/' . $autowiring_path;
+
+			if ( ! is_dir( $full_path ) ) {
+				WP_CLI::warning( "Autowiring path does not exist: {$full_path}" );
+				continue;
+			}
+
+			$discovered = $discovery->discover( $full_path );
+			$classes    = array_merge( $classes, $discovered );
+		}
 
 		if ( empty( $classes ) ) {
 			WP_CLI::warning( 'No classes found to compile.' );
@@ -91,5 +112,21 @@ class Compile_Command {
 		} else {
 			WP_CLI::error( 'Failed to compile container cache' );
 		}
+	}
+
+	/**
+	 * Parse autowiring paths from command arguments
+	 *
+	 * @param array $assoc_args Associative arguments from WP-CLI.
+	 * @return array Autowiring paths.
+	 */
+	private function parse_autowiring_paths( array $assoc_args ): array {
+		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
+			return array( 'src' ); // Default
+		}
+
+		$paths = explode( ',', $assoc_args['autowiring-paths'] );
+
+		return array_map( 'trim', $paths );
 	}
 }
