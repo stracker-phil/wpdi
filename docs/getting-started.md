@@ -101,9 +101,67 @@ class My_Config {
 
 ## How It Works
 
-1. **Auto-Discovery** - WPDI scans `src/` for PHP classes
+1. **Auto-Discovery** - WPDI scans `src/` for PHP classes (customizable)
 2. **Autowiring** - Analyzes constructor parameters via reflection
 3. **Dependency Injection** - Instantiates and injects dependencies automatically
+
+## Customizing Autowiring Paths
+
+By default, WPDI discovers classes from the `src/` directory. Override `autowiring_paths()` to customize:
+
+### Single Custom Path
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array( 'lib' );  // Use lib/ instead of src/
+    }
+
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        $app = $r->get( My_Application::class );
+        $app->run();
+    }
+}
+```
+
+### Multiple Modules
+
+```php
+class Multi_Module_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array(
+            'modules/auth/src',
+            'modules/payment/src',
+            'shared/src'
+        );
+    }
+
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        // Services from all paths are available
+        $auth = $r->get( Auth_Service::class );
+    }
+}
+```
+
+### Disable Auto-Discovery
+
+```php
+class Config_Only_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array();  // No auto-discovery, only wpdi-config.php
+    }
+
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        // Only manually configured services available
+    }
+}
+```
+
+**Notes:**
+- Paths are relative to your plugin/theme directory
+- Non-existent paths are silently skipped
+- Later paths override earlier ones if classes have the same name
+- See [Configuration](configuration.md) for advanced scenarios
 
 ## Directory Structure
 

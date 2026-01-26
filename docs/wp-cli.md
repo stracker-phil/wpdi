@@ -9,12 +9,13 @@ List all injectable services without compiling.
 **Synopsis:**
 
 ```bash
-wp di list [--path=<path>] [--format=<format>]
+wp di list [--path=<path>] [--autowiring-paths=<paths>] [--format=<format>]
 ```
 
 **Options:**
 
 - `--path=<path>` - Module directory (default: current directory)
+- `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
 - `--format=<format>` - Output format (default: table)
     - `table` - ASCII table
     - `json` - JSON array
@@ -50,12 +51,13 @@ Compile container cache for production.
 **Synopsis:**
 
 ```bash
-wp di compile [--path=<path>] [--force]
+wp di compile [--path=<path>] [--autowiring-paths=<paths>] [--force]
 ```
 
 **Options:**
 
 - `--path=<path>` - Module directory (default: current directory)
+- `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
 - `--force` - Overwrite existing cache file
 
 **Example:**
@@ -96,6 +98,18 @@ Success: Cache cleared: cache/wpdi-container.php
 Success: Removed empty cache directory
 ```
 
+## Multi-Module Projects
+
+When using custom autowiring paths, specify them with `--autowiring-paths`:
+
+```bash
+# List services from multiple modules
+wp di list --autowiring-paths=modules/auth/src,modules/payment/src,shared/src
+
+# Compile with custom paths
+wp di compile --autowiring-paths=modules/auth/src,modules/payment/src --force
+```
+
 ## Workflows
 
 ### Development
@@ -106,6 +120,9 @@ wp di list
 
 # Check specific classes
 wp di list --format=json | jq '.[] | select(.autowirable == "no")'
+
+# List from custom path
+wp di list --autowiring-paths=lib
 ```
 
 ### Pre-Deployment

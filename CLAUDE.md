@@ -77,7 +77,8 @@ ddev composer update
 - Constructor takes `$scope_file` (use `__FILE__`), creates Container, initializes it, then calls bootstrap(Resolver)
 - Container is local variable only (not stored as property)
 - bootstrap() receives Resolver with limited API (no direct Container access)
-- Auto-discovery scans `dirname($scope_file) . '/src'` for classes
+- **autowiring_paths()** - Configurable method that returns array of relative paths for auto-discovery (default: `['src']`)
+- Auto-discovery scans paths returned by `autowiring_paths()` for classes
 
 **4. Auto_Discovery (`src/Auto_Discovery.php`)**
 

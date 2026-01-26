@@ -1,8 +1,62 @@
 # Configuration
 
-WPDI works with zero configuration for concrete classes in `src/`. You only need `wpdi-config.php` for interface bindings or classes outside `src/` (e.g., Composer packages).
+WPDI works with zero configuration for concrete classes in `src/`. You only need `wpdi-config.php` for interface bindings or classes outside autowiring paths (e.g., Composer packages).
 
-## Basic Usage
+## Autowiring Paths
+
+By default, WPDI auto-discovers classes from `src/`. Override `autowiring_paths()` to customize:
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array( 'src' );  // Default
+    }
+}
+```
+
+### Multi-Module Structure
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array(
+            'modules/core/src',
+            'modules/admin/src',
+            'modules/api/src'
+        );
+    }
+}
+```
+
+### Conditional Paths
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        $paths = array( 'src' );
+
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            $paths[] = 'debug-tools/src';
+        }
+
+        return $paths;
+    }
+}
+```
+
+### No Auto-Discovery
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array();  // Manual bindings only (wpdi-config.php)
+    }
+}
+```
+
+## Manual Bindings (wpdi-config.php)
+
+Use `wpdi-config.php` for interface bindings and external classes.
 
 ```php
 <?php
