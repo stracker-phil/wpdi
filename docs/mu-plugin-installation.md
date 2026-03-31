@@ -110,6 +110,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
+
+// Register "wp di" CLI commands early, so they are available
+// even when no plugin instantiates a Scope at load time.
+WPDI\Commands\Cli::register_commands();
 ```
 
 ### Benefits

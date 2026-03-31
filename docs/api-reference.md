@@ -130,6 +130,22 @@ Check if service exists.
 
 ---
 
+## WPDI\Commands\Cli
+
+Standalone WP-CLI command registration.
+
+### register_commands(): void (static)
+
+Register all `wp di` WP-CLI commands without instantiating a `Scope` or `Container`. Safe to call multiple times and a no-op when WP-CLI is not active.
+
+```php
+WPDI\Commands\Cli::register_commands();
+```
+
+When extending `Scope`, this is called automatically.
+
+---
+
 ## Exceptions
 
 ### WPDI_Exception

@@ -2,6 +2,19 @@
 
 WPDI includes WP-CLI commands for development and deployment.
 
+## Registering Commands
+
+When you extend `WPDI\Scope`, the CLI commands are registered automatically. If your plugin uses WPDI without instantiating a `Scope` at load time (e.g., lazy initialization inside a WP-CLI callback), register the commands explicitly:
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+// Register "wp di" commands without instantiating Scope.
+WPDI\Commands\Cli::register_commands();
+```
+
+The method is a no-op outside WP-CLI and safe to call multiple times.
+
 ## wp di list
 
 List all injectable services without compiling.
@@ -9,13 +22,14 @@ List all injectable services without compiling.
 **Synopsis:**
 
 ```bash
-wp di list [--path=<path>] [--autowiring-paths=<paths>] [--format=<format>]
+wp di list [--dir=<dir>] [--autowiring-paths=<paths>] [--filter=<filter>] [--format=<format>]
 ```
 
 **Options:**
 
-- `--path=<path>` - Module directory (default: current directory)
+- `--dir=<dir>` - Module directory (default: current directory)
 - `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
+- `--filter=<filter>` - Only show services whose fully-qualified class name contains this substring
 - `--format=<format>` - Output format (default: table)
     - `table` - ASCII table
     - `json` - JSON array
@@ -51,12 +65,12 @@ Compile container cache for production.
 **Synopsis:**
 
 ```bash
-wp di compile [--path=<path>] [--autowiring-paths=<paths>] [--force]
+wp di compile [--dir=<dir>] [--autowiring-paths=<paths>] [--force]
 ```
 
 **Options:**
 
-- `--path=<path>` - Module directory (default: current directory)
+- `--dir=<dir>` - Module directory (default: current directory)
 - `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
 - `--force` - Overwrite existing cache file
 
@@ -84,13 +98,13 @@ Inspect a class and display its dependency tree.
 **Synopsis:**
 
 ```bash
-wp di inspect <class> [--path=<path>] [--autowiring-paths=<paths>] [--depth=<depth>]
+wp di inspect <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
 ```
 
 **Options:**
 
 - `<class>` - Class or interface name to inspect (short or fully-qualified)
-- `--path=<path>` - Module directory (default: current directory)
+- `--dir=<dir>` - Module directory (default: current directory)
 - `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
 - `--depth=<depth>` - Maximum tree depth to display (default: unlimited)
 
@@ -122,12 +136,12 @@ Clear compiled cache.
 **Synopsis:**
 
 ```bash
-wp di clear [--path=<path>]
+wp di clear [--dir=<dir>]
 ```
 
 **Options:**
 
-- `--path=<path>` - Module directory (default: current directory)
+- `--dir=<dir>` - Module directory (default: current directory)
 
 **Example:**
 
