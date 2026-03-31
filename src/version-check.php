@@ -6,7 +6,7 @@
  * This file is loaded before any WPDI classes are declared.
  */
 
-$module_version = '1.0.2';
+$module_version = '1.0.3';
 
 if ( ! defined( 'WPDI_VERSION' ) ) {
 	define( 'WPDI_VERSION', $module_version );
