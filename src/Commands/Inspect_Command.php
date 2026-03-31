@@ -62,7 +62,7 @@ class Inspect_Command {
 
 		// Path header.
 		$file_path = $this->get_class_file_path( $class_name, $path );
-		WP_CLI::log( "Path: {$file_path}" );
+		WP_CLI::log( WP_CLI::colorize( "Path: %W{$file_path}%n" ) );
 		WP_CLI::log( '' );
 
 		// Warnings.
@@ -283,11 +283,16 @@ class Inspect_Command {
 			$pad1       = $max_col1 - $col1_width + 4;
 			$pad2       = $max_col2 - strlen( $row['type'] ) + 4;
 
-			$line = $row['prefix'] . $row['label']
+			$label_color = $this->get_label_color( $row );
+			$type_color  = $this->get_type_color( $row['type'] );
+			$fqcn_str    = $this->colorize_fqcn( $row['fqcn'] );
+
+			$line = $row['prefix']
+				. WP_CLI::colorize( $label_color . $row['label'] . '%n' )
 				. str_repeat( ' ', $pad1 )
-				. $row['type']
+				. WP_CLI::colorize( $type_color . $row['type'] . '%n' )
 				. str_repeat( ' ', $pad2 )
-				. $row['fqcn'];
+				. $fqcn_str;
 
 			$lines[] = $line;
 		}
@@ -307,6 +312,55 @@ class Inspect_Command {
 		}
 
 		return $type;
+	}
+
+	/**
+	 * Get the color token for a tree row label
+	 *
+	 * @param array $row Tree row data.
+	 * @return string WP_CLI color token.
+	 */
+	private function get_label_color( array $row ): string {
+		// Root row (class name) gets bright white.
+		if ( '' === $row['prefix'] ) {
+			return '%W';
+		}
+
+		// Parameter names get yellow.
+		return '%y';
+	}
+
+	/**
+	 * Get the color token for a type label
+	 *
+	 * @param string $type Type label (class, interface, abstract, unknown).
+	 * @return string WP_CLI color token.
+	 */
+	private function get_type_color( string $type ): string {
+		switch ( $type ) {
+			case 'class':
+				return '%g';
+			case 'interface':
+				return '%c';
+			case 'abstract':
+				return '%p';
+			default:
+				return '%y';
+		}
+	}
+
+	/**
+	 * Colorize an FQCN string, highlighting [CIRCULAR] markers in red
+	 *
+	 * @param string $fqcn FQCN string, possibly with [CIRCULAR] suffix.
+	 * @return string Colorized string.
+	 */
+	private function colorize_fqcn( string $fqcn ): string {
+		if ( false !== strpos( $fqcn, '[CIRCULAR]' ) ) {
+			$fqcn = str_replace( '[CIRCULAR]', WP_CLI::colorize( '%r[CIRCULAR]%n' ), $fqcn );
+		}
+
+		return $fqcn;
 	}
 
 	/**

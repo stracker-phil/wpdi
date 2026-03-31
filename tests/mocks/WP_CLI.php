@@ -110,6 +110,19 @@ class WP_CLI {
 	}
 
 	/**
+	 * Mock colorize method - strips color tokens and returns plain text
+	 *
+	 * In real WP_CLI, colorize() converts %g, %c, etc. to ANSI escape codes.
+	 * In tests we strip them so assertions can match plain text.
+	 *
+	 * @param string $string String with color tokens.
+	 * @return string String with color tokens removed.
+	 */
+	public static function colorize( string $string ): string {
+		return preg_replace( '/%[ygbrpmcwknYGBRPMCWKNFU_0-9]/', '', $string );
+	}
+
+	/**
 	 * Mock add_command method - does nothing in tests
 	 *
 	 * @param string $name     Command name.

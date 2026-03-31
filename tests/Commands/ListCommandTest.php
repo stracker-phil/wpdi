@@ -63,6 +63,17 @@ class ListCommandTest extends TestCase {
 	}
 
 	/**
+	 * Get all log messages as a single string
+	 */
+	private function getLogOutput(): string {
+		$logs = $this->getWpCliCalls( 'log' );
+
+		return implode( "\n", array_map( function ( $call ) {
+			return $call['args'][0];
+		}, $logs ) );
+	}
+
+	/**
 	 * Get format_items call from WP_CLI tracked calls
 	 *
 	 * Helper to extract the format_items call which contains format, items, and fields.
@@ -86,28 +97,21 @@ class ListCommandTest extends TestCase {
 	 */
 	public function outputFormatProvider(): array {
 		return array(
-			'table format (default)' => array( 'table', null, 2 ),
-			'json format'            => array( 'json', 'json', 1 ),
-			'csv format'             => array( 'csv', 'csv', 1 ),
-			'yaml format'            => array( 'yaml', 'yaml', 1 ),
+			'json format' => array( 'json', 'json', 1 ),
+			'csv format'  => array( 'csv', 'csv', 1 ),
+			'yaml format' => array( 'yaml', 'yaml', 1 ),
 		);
 	}
 
 	/**
 	 * GIVEN classes to list
-	 * WHEN using different output formats
-	 * THEN should format output correctly
+	 * WHEN using non-table output formats
+	 * THEN should delegate to format_items with correct arguments
 	 *
 	 * @dataProvider outputFormatProvider
 	 */
 	public function test_supports_multiple_output_formats( string $expected_format, ?string $format_arg, int $class_count ): void {
-		// Create test classes based on count needed
-		if ( $class_count >= 2 ) {
-			$this->createTestClass( 'Test_Service_One' );
-			$this->createTestClass( 'Test_Service_Two' );
-		} else {
-			$this->createTestClass( 'Test_Service' );
-		}
+		$this->createTestClass( 'Test_Service' );
 
 		$command = new List_Command();
 		$args    = array( 'path' => $this->temp_dir );
@@ -128,6 +132,32 @@ class ListCommandTest extends TestCase {
 			'autowirable',
 			'source',
 		), $format_call['args'][2], 'Should include all required fields' );
+	}
+
+	/**
+	 * GIVEN classes to list
+	 * WHEN using default table format
+	 * THEN should render a colored table via WP_CLI::log
+	 */
+	public function test_table_format_renders_colored_output(): void {
+		$this->createTestClass( 'Test_Service_One' );
+		$this->createTestClass( 'Test_Service_Two' );
+
+		$command = new List_Command();
+		$command->__invoke( array(), array( 'path' => $this->temp_dir ) );
+
+		// Table format does not use format_items.
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNull( $format_call, 'Table format should not call format_items' );
+
+		$output = $this->getLogOutput();
+
+		// Should contain table structure.
+		$this->assertStringContainsString( '+', $output );
+		$this->assertStringContainsString( '|', $output );
+		$this->assertStringContainsString( 'class', $output );
+		$this->assertStringContainsString( 'Test_Service_One', $output );
+		$this->assertStringContainsString( 'Test_Service_Two', $output );
 	}
 
 	/**
@@ -192,17 +222,14 @@ class ListCommandTest extends TestCase {
 			array( 'path' => $this->temp_dir )
 		);
 
-		// Get format_items call to verify class metadata
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call, 'format_items should be called' );
-
-		$items = $format_call['args'][1];
+		$output = $this->getLogOutput();
 
 		// Only concrete class should be listed (Auto_Discovery filters out interfaces/abstracts)
-		$this->assertCount( 1, $items, 'Only concrete classes should be listed' );
-		$this->assertEquals( 'Concrete_Service', $items[0]['class'], 'Should contain concrete class' );
-		$this->assertEquals( 'concrete', $items[0]['type'], 'Class type should be concrete' );
-		$this->assertEquals( 'yes', $items[0]['autowirable'], 'Concrete class should be autowirable' );
+		$this->assertStringContainsString( 'Concrete_Service', $output, 'Should contain concrete class' );
+		$this->assertStringContainsString( 'concrete', $output, 'Class type should be concrete' );
+		$this->assertStringContainsString( 'yes', $output, 'Concrete class should be autowirable' );
+		$this->assertStringNotContainsString( 'Service_Interface', $output, 'Should not list interfaces' );
+		$this->assertStringNotContainsString( 'Abstract_Service', $output, 'Should not list abstract classes' );
 	}
 
 	/**
@@ -222,11 +249,8 @@ class ListCommandTest extends TestCase {
 			$command = new List_Command();
 			$command->__invoke( array(), array() );
 
-			// Verify listing succeeded by checking format_items call
-			$format_call = $this->getFormatItemsCall();
-			$this->assertNotNull( $format_call, 'format_items should be called when classes are found' );
-			$this->assertCount( 1, $format_call['args'][1], 'Should list class in current directory' );
-			$this->assertEquals( 'Test_Service', $format_call['args'][1][0]['class'], 'Should find the test class' );
+			$output = $this->getLogOutput();
+			$this->assertStringContainsString( 'Test_Service', $output, 'Should find the test class' );
 		} finally {
 			chdir( $original_cwd );
 		}
@@ -256,33 +280,13 @@ PHP;
 			array( 'path' => $this->temp_dir )
 		);
 
-		// Verify format_items was called
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call, 'format_items should be called' );
+		$output = $this->getLogOutput();
 
-		$items = $format_call['args'][1];
-
-		// Should have 2 items: one from src/, one from config
-		$this->assertCount( 2, $items, 'Should list both discovered and configured services' );
-
-		// Find items by class name
-		$src_item    = null;
-		$config_item = null;
-		foreach ( $items as $item ) {
-			if ( 'My_Service' === $item['class'] ) {
-				$src_item = $item;
-			} elseif ( 'Logger_Interface' === $item['class'] ) {
-				$config_item = $item;
-			}
-		}
-
-		// Verify discovered class
-		$this->assertNotNull( $src_item, 'Should include discovered class' );
-		$this->assertEquals( 'src', $src_item['source'], 'Discovered class should have source "src"' );
-
-		// Verify configured service
-		$this->assertNotNull( $config_item, 'Should include configured service' );
-		$this->assertEquals( 'config', $config_item['source'], 'Configured service should have source "config"' );
+		// Should contain both discovered and configured services
+		$this->assertStringContainsString( 'My_Service', $output, 'Should include discovered class' );
+		$this->assertStringContainsString( 'Logger_Interface', $output, 'Should include configured service' );
+		$this->assertStringContainsString( 'src', $output, 'Should show src source' );
+		$this->assertStringContainsString( 'config', $output, 'Should show config source' );
 	}
 
 	/**

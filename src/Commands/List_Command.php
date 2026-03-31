@@ -96,7 +96,102 @@ class List_Command {
 			return;
 		}
 
-		format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+		if ( 'table' === $format ) {
+			$this->display_colored_table( $output );
+		} else {
+			format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+		}
+	}
+
+	/**
+	 * Display a colorized table for terminal output
+	 *
+	 * @param array $items Service list items.
+	 */
+	private function display_colored_table( array $items ): void {
+		$fields = array( 'class', 'type', 'autowirable', 'source' );
+
+		// Calculate column widths from raw (uncolored) values.
+		$widths = array();
+		foreach ( $fields as $field ) {
+			$widths[ $field ] = strlen( $field );
+		}
+		foreach ( $items as $item ) {
+			foreach ( $fields as $field ) {
+				$len = strlen( $item[ $field ] );
+				if ( $len > $widths[ $field ] ) {
+					$widths[ $field ] = $len;
+				}
+			}
+		}
+
+		// Build separator and header.
+		$sep_parts    = array();
+		$header_parts = array();
+		foreach ( $fields as $field ) {
+			$sep_parts[]    = str_repeat( '-', $widths[ $field ] + 2 );
+			$header_parts[] = ' ' . str_pad( $field, $widths[ $field ] ) . ' ';
+		}
+		$separator = '+' . implode( '+', $sep_parts ) . '+';
+		$header    = '|' . implode( '|', $header_parts ) . '|';
+
+		WP_CLI::log( $separator );
+		WP_CLI::log( $header );
+		WP_CLI::log( $separator );
+
+		// Build rows with color.
+		foreach ( $items as $item ) {
+			$cells = array();
+			foreach ( $fields as $field ) {
+				$raw = $item[ $field ];
+				$pad = $widths[ $field ];
+
+				$colored = $this->colorize_cell( $field, $raw );
+				// Pad based on raw length, then insert colored value.
+				$cells[] = ' ' . $colored . str_repeat( ' ', $pad - strlen( $raw ) ) . ' ';
+			}
+			WP_CLI::log( '|' . implode( '|', $cells ) . '|' );
+		}
+
+		WP_CLI::log( $separator );
+	}
+
+	/**
+	 * Colorize a single table cell value
+	 *
+	 * @param string $field Column name.
+	 * @param string $value Cell value.
+	 * @return string Colorized value.
+	 */
+	private function colorize_cell( string $field, string $value ): string {
+		if ( 'class' === $field ) {
+			$short = $this->get_short_class_name( $value );
+			$ns    = substr( $value, 0, strlen( $value ) - strlen( $short ) );
+
+			return $ns . WP_CLI::colorize( '%G' . $short . '%n' );
+		}
+
+		if ( 'autowirable' === $field && 'no' === $value ) {
+			return WP_CLI::colorize( '%r' . $value . '%n' );
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Get the short (unqualified) class name from a FQCN
+	 *
+	 * @param string $fqcn Fully-qualified class name.
+	 * @return string Short class name.
+	 */
+	private function get_short_class_name( string $fqcn ): string {
+		$pos = strrpos( $fqcn, '\\' );
+
+		if ( false === $pos ) {
+			return $fqcn;
+		}
+
+		return substr( $fqcn, $pos + 1 );
 	}
 
 	/**
