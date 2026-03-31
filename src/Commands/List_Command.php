@@ -25,7 +25,7 @@ class List_Command {
 	 * List all injectable services
 	 *
 	 * @subcommand list
-	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--format=<format>]
+	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--filter=<filter>] [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -35,6 +35,9 @@ class List_Command {
 	 * [--autowiring-paths=<paths>]
 	 * : Comma-separated autowiring paths relative to module (default: src)
 	 *
+	 * [--filter=<filter>]
+	 * : Only show services whose fully-qualified class name contains this substring
+	 *
 	 * [--format=<format>]
 	 * : Output format (table, json, yaml, csv) (default: table)
 	 *
@@ -42,6 +45,7 @@ class List_Command {
 	 *
 	 *     wp di list
 	 *     wp di list --dir=/path/to/module --format=json
+	 *     wp di list --filter=Services
 	 *     wp di list --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
@@ -93,6 +97,18 @@ class List_Command {
 			}
 		}
 
+		// Apply --filter substring match against class name.
+		if ( isset( $assoc_args['filter'] ) ) {
+			$filter = $assoc_args['filter'];
+			$output = array_filter(
+				$output,
+				function ( array $item ) use ( $filter ): bool {
+					return false !== strpos( $item['class'], $filter );
+				}
+			);
+			$output = array_values( $output );
+		}
+
 		if ( empty( $output ) ) {
 			WP_CLI::log( "No services found in {$path}" );
 
@@ -128,19 +144,25 @@ class List_Command {
 			}
 		}
 
-		// Build separator and header.
-		$sep_parts    = array();
+		// Build border lines using box-drawing characters.
+		$h_bars = array();
+		foreach ( $fields as $field ) {
+			$h_bars[ $field ] = str_repeat( "\xE2\x94\x80", $widths[ $field ] + 2 );
+		}
+
+		$top_border = "\xE2\x94\x8C" . implode( "\xE2\x94\xAC", $h_bars ) . "\xE2\x94\x90";
+		$mid_border = "\xE2\x94\x9C" . implode( "\xE2\x94\xBC", $h_bars ) . "\xE2\x94\xA4";
+		$bot_border = "\xE2\x94\x94" . implode( "\xE2\x94\xB4", $h_bars ) . "\xE2\x94\x98";
+
 		$header_parts = array();
 		foreach ( $fields as $field ) {
-			$sep_parts[]    = str_repeat( '-', $widths[ $field ] + 2 );
 			$header_parts[] = ' ' . str_pad( $field, $widths[ $field ] ) . ' ';
 		}
-		$separator = '+' . implode( '+', $sep_parts ) . '+';
-		$header    = '|' . implode( '|', $header_parts ) . '|';
+		$header = "\xE2\x94\x82" . implode( "\xE2\x94\x82", $header_parts ) . "\xE2\x94\x82";
 
-		WP_CLI::log( $separator );
+		WP_CLI::log( $top_border );
 		WP_CLI::log( $header );
-		WP_CLI::log( $separator );
+		WP_CLI::log( $mid_border );
 
 		// Build rows with color.
 		foreach ( $items as $item ) {
@@ -153,10 +175,10 @@ class List_Command {
 				// Pad based on raw length, then insert colored value.
 				$cells[] = ' ' . $colored . str_repeat( ' ', $pad - strlen( $raw ) ) . ' ';
 			}
-			WP_CLI::log( '|' . implode( '|', $cells ) . '|' );
+			WP_CLI::log( "\xE2\x94\x82" . implode( "\xE2\x94\x82", $cells ) . "\xE2\x94\x82" );
 		}
 
-		WP_CLI::log( $separator );
+		WP_CLI::log( $bot_border );
 	}
 
 	/**

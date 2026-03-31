@@ -152,9 +152,9 @@ class ListCommandTest extends TestCase {
 
 		$output = $this->getLogOutput();
 
-		// Should contain table structure.
-		$this->assertStringContainsString( '+', $output );
-		$this->assertStringContainsString( '|', $output );
+		// Should contain box-drawing table structure.
+		$this->assertStringContainsString( "\xE2\x94\x8C", $output );
+		$this->assertStringContainsString( "\xE2\x94\x82", $output );
 		$this->assertStringContainsString( 'class', $output );
 		$this->assertStringContainsString( 'Test_Service_One', $output );
 		$this->assertStringContainsString( 'Test_Service_Two', $output );
@@ -287,6 +287,52 @@ PHP;
 		$this->assertStringContainsString( 'Logger_Interface', $output, 'Should include configured service' );
 		$this->assertStringContainsString( 'src', $output, 'Should show src source' );
 		$this->assertStringContainsString( 'config', $output, 'Should show config source' );
+	}
+
+	/**
+	 * GIVEN multiple classes
+	 * WHEN listing with --filter matching one class
+	 * THEN should only show matching classes
+	 */
+	public function test_filter_limits_output_to_matching_classes(): void {
+		$this->createTestClass( 'Alpha_Service' );
+		$this->createTestClass( 'Beta_Handler' );
+
+		$command = new List_Command();
+		$command->__invoke(
+			array(),
+			array(
+				'dir'    => $this->temp_dir,
+				'filter' => 'Alpha',
+			)
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( 'Alpha_Service', $output );
+		$this->assertStringNotContainsString( 'Beta_Handler', $output );
+	}
+
+	/**
+	 * GIVEN multiple classes
+	 * WHEN listing with --filter matching nothing
+	 * THEN should show "No services found" message
+	 */
+	public function test_filter_with_no_matches_shows_log_message(): void {
+		$this->createTestClass( 'Some_Service' );
+
+		$command = new List_Command();
+		$command->__invoke(
+			array(),
+			array(
+				'dir'    => $this->temp_dir,
+				'filter' => 'Nonexistent',
+			)
+		);
+
+		$log_calls = $this->getWpCliCalls( 'log' );
+		$this->assertCount( 1, $log_calls );
+		$this->assertStringContainsString( 'No services found', $log_calls[0]['args'][0] );
 	}
 
 	/**
