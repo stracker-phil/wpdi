@@ -26,12 +26,15 @@ class Inspect_Command {
 	 * Accepts a fully-qualified class name or a short (unqualified) name.
 	 * Short names are resolved by scanning the autodiscovery paths.
 	 *
+	 * @subcommand inspect
+	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
+	 *
 	 * ## OPTIONS
 	 *
 	 * <class>
 	 * : Class or interface name to inspect (short or fully-qualified)
 	 *
-	 * [--path=<path>]
+	 * [--dir=<dir>]
 	 * : Path to module directory (default: current directory)
 	 *
 	 * [--autowiring-paths=<paths>]
@@ -48,7 +51,7 @@ class Inspect_Command {
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$class_name       = $args[0];
-		$path             = $assoc_args['path'] ?? getcwd();
+		$path             = $assoc_args['dir'] ?? getcwd();
 		$max_depth        = isset( $assoc_args['depth'] ) ? (int) $assoc_args['depth'] : 0;
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 

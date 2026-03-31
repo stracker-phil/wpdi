@@ -24,9 +24,12 @@ class List_Command {
 	/**
 	 * List all injectable services
 	 *
+	 * @subcommand list
+	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--format=<format>]
+	 *
 	 * ## OPTIONS
 	 *
-	 * [--path=<path>]
+	 * [--dir=<dir>]
 	 * : Path to module directory (default: current directory)
 	 *
 	 * [--autowiring-paths=<paths>]
@@ -38,11 +41,11 @@ class List_Command {
 	 * ## EXAMPLES
 	 *
 	 *     wp di list
-	 *     wp di list --path=/path/to/module --format=json
+	 *     wp di list --dir=/path/to/module --format=json
 	 *     wp di list --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path             = $assoc_args['path'] ?? getcwd();
+		$path             = $assoc_args['dir'] ?? getcwd();
 		$format           = $assoc_args['format'] ?? 'table';
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
@@ -146,7 +149,7 @@ class List_Command {
 				$raw = $item[ $field ];
 				$pad = $widths[ $field ];
 
-				$colored = $this->colorize_cell( $field, $raw );
+				$colored = $this->colorize_cell( $field, $raw, $item );
 				// Pad based on raw length, then insert colored value.
 				$cells[] = ' ' . $colored . str_repeat( ' ', $pad - strlen( $raw ) ) . ' ';
 			}
@@ -163,12 +166,13 @@ class List_Command {
 	 * @param string $value Cell value.
 	 * @return string Colorized value.
 	 */
-	private function colorize_cell( string $field, string $value ): string {
+	private function colorize_cell( string $field, string $value, array $item ): string {
 		if ( 'class' === $field ) {
 			$short = $this->get_short_class_name( $value );
 			$ns    = substr( $value, 0, strlen( $value ) - strlen( $short ) );
+			$color = 'interface' === $item['type'] ? '%c' : '%G';
 
-			return $ns . WP_CLI::colorize( '%G' . $short . '%n' );
+			return $ns . WP_CLI::colorize( $color . $short . '%n' );
 		}
 
 		if ( 'autowirable' === $field && 'no' === $value ) {

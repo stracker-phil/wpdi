@@ -83,7 +83,7 @@ class ClearCommandTest extends TestCase {
 		$command = new Clear_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify cache file was deleted
@@ -134,7 +134,7 @@ class ClearCommandTest extends TestCase {
 		try {
 			$command->__invoke(
 				array(),
-				array( 'path' => $this->temp_dir )
+				array( 'dir' => $this->temp_dir )
 			);
 		} catch ( WP_CLI_Exception $e ) {
 			// Verify error was called
@@ -156,7 +156,7 @@ class ClearCommandTest extends TestCase {
 		$command = new Clear_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify log message
@@ -180,7 +180,7 @@ class ClearCommandTest extends TestCase {
 		$command = new Clear_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify cache directory was removed
@@ -210,7 +210,7 @@ class ClearCommandTest extends TestCase {
 		$command = new Clear_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify cache file was deleted but directory still exists
@@ -272,7 +272,7 @@ class ClearCommandTest extends TestCase {
 		// First clear - should succeed
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 		$this->assertFileDoesNotExist( $cache_file );
 
@@ -282,7 +282,7 @@ class ClearCommandTest extends TestCase {
 		// Second clear - should show "no cache file found"
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 		$log_calls = $this->getWpCliCalls( 'log' );
 		$this->assertCount( 1, $log_calls );

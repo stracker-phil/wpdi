@@ -16,9 +16,12 @@ class Compile_Command {
 	/**
 	 * Compile WPDI container cache
 	 *
+	 * @subcommand compile
+	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--force]
+	 *
 	 * ## OPTIONS
 	 *
-	 * [--path=<path>]
+	 * [--dir=<dir>]
 	 * : Path to module directory (default: current directory)
 	 *
 	 * [--autowiring-paths=<paths>]
@@ -30,11 +33,11 @@ class Compile_Command {
 	 * ## EXAMPLES
 	 *
 	 *     wp di compile
-	 *     wp di compile --path=/path/to/module --force
+	 *     wp di compile --dir=/path/to/module --force
 	 *     wp di compile --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path             = $assoc_args['path'] ?? getcwd();
+		$path             = $assoc_args['dir'] ?? getcwd();
 		$force            = isset( $assoc_args['force'] );
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 

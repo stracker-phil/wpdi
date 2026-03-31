@@ -114,7 +114,7 @@ class ListCommandTest extends TestCase {
 		$this->createTestClass( 'Test_Service' );
 
 		$command = new List_Command();
-		$args    = array( 'path' => $this->temp_dir );
+		$args    = array( 'dir' => $this->temp_dir );
 		if ( null !== $format_arg ) {
 			$args['format'] = $format_arg;
 		}
@@ -144,7 +144,7 @@ class ListCommandTest extends TestCase {
 		$this->createTestClass( 'Test_Service_Two' );
 
 		$command = new List_Command();
-		$command->__invoke( array(), array( 'path' => $this->temp_dir ) );
+		$command->__invoke( array(), array( 'dir' => $this->temp_dir ) );
 
 		// Table format does not use format_items.
 		$format_call = $this->getFormatItemsCall();
@@ -174,7 +174,7 @@ class ListCommandTest extends TestCase {
 		try {
 			$command->__invoke(
 				array(),
-				array( 'path' => '/nonexistent/path' )
+				array( 'dir' => '/nonexistent/path' )
 			);
 		} catch ( WP_CLI_Exception $e ) {
 			// Verify error was called before exception
@@ -196,7 +196,7 @@ class ListCommandTest extends TestCase {
 		$command = new List_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify log was called
@@ -219,7 +219,7 @@ class ListCommandTest extends TestCase {
 		$command = new List_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -277,7 +277,7 @@ PHP;
 		$command = new List_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();

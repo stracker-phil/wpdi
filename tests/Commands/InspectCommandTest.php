@@ -75,7 +75,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'Nonexistent\\Class\\Name' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 	}
 
@@ -89,7 +89,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -113,7 +113,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithDependency' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -133,7 +133,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithDefaultValue' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -153,7 +153,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithNullableParameter' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -173,7 +173,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\LoggerInterface' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -194,7 +194,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\AbstractClass' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -215,7 +215,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\CircularA' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -234,7 +234,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -258,7 +258,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'Inspect_Discovered_Service' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -275,7 +275,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -293,7 +293,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithMultipleDependencies' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -315,7 +315,7 @@ class InspectCommandTest extends TestCase {
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
 			array(
-				'path'  => $this->temp_dir,
+				'dir'  => $this->temp_dir,
 				'depth' => '1',
 			)
 		);
@@ -340,7 +340,7 @@ class InspectCommandTest extends TestCase {
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
 			array(
-				'path'  => $this->temp_dir,
+				'dir'  => $this->temp_dir,
 				'depth' => '0',
 			)
 		);
@@ -362,7 +362,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'WPDI\\Tests\\Fixtures\\ClassWithNullableParameter' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -385,7 +385,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'MyService' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		$output = $this->getLogOutput();
@@ -410,7 +410,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'Ambiguous_Service' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 	}
 
@@ -426,7 +426,7 @@ class InspectCommandTest extends TestCase {
 
 		$command->__invoke(
 			array( 'NonexistentShortName' ),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 	}
 

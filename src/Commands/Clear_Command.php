@@ -15,18 +15,21 @@ class Clear_Command {
 	/**
 	 * Clear compiled cache
 	 *
+	 * @subcommand clear
+	 * @synopsis [--dir=<dir>]
+	 *
 	 * ## OPTIONS
 	 *
-	 * [--path=<path>]
+	 * [--dir=<dir>]
 	 * : Path to module directory (default: current directory)
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp di clear
-	 *     wp di clear --path=/path/to/module
+	 *     wp di clear --dir=/path/to/module
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path     = $assoc_args['path'] ?? getcwd();
+		$path     = $assoc_args['dir'] ?? getcwd();
 		$compiler = new Compiler( $path );
 
 		if ( $compiler->exists() ) {

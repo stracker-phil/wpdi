@@ -74,7 +74,7 @@ class CompileCommandTest extends TestCase {
 		$command = new Compile_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify cache file was created
@@ -110,7 +110,7 @@ class CompileCommandTest extends TestCase {
 		$command = new Compile_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify cache was not modified
@@ -141,7 +141,7 @@ class CompileCommandTest extends TestCase {
 		$command->__invoke(
 			array(),
 			array(
-				'path'  => $this->temp_dir,
+				'dir'  => $this->temp_dir,
 				'force' => true,
 			)
 		);
@@ -170,7 +170,7 @@ class CompileCommandTest extends TestCase {
 		try {
 			$command->__invoke(
 				array(),
-				array( 'path' => '/nonexistent/path' )
+				array( 'dir' => '/nonexistent/path' )
 			);
 		} catch ( WP_CLI_Exception $e ) {
 			// Verify error was called before exception
@@ -193,7 +193,7 @@ class CompileCommandTest extends TestCase {
 		$command = new Compile_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Verify warning was shown
@@ -230,7 +230,7 @@ PHP;
 		$command = new Compile_Command();
 		$command->__invoke(
 			array(),
-			array( 'path' => $this->temp_dir )
+			array( 'dir' => $this->temp_dir )
 		);
 
 		// Get all log messages
@@ -351,7 +351,7 @@ PHP;
 			// Suppress file_put_contents warning since we're testing the failure path
 			@$command->__invoke(
 				array(),
-				array( 'path' => $this->temp_dir )
+				array( 'dir' => $this->temp_dir )
 			);
 		} catch ( WP_CLI_Exception $e ) {
 			// Verify error was called
