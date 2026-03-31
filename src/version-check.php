@@ -16,18 +16,19 @@ if ( ! defined( 'WPDI_VERSION' ) ) {
 if ( class_exists( 'WPDI\Scope' ) ) {
 	// ONLY fail if the loaded version is older than required
 	if ( version_compare( WPDI_VERSION, $module_version, '<' ) ) {
-		/** @noinspection ForgottenDebugOutputInspection */
-		wp_die(
-			sprintf(
-				'<h1>WPDI Version Conflict</h1>' .
-				'<p>A plugin requires WPDI v%s, but an older version (v%s) is already loaded.</p>' .
-				'<p><strong>Solution:</strong> Use a scoper for this plugin OR update WPDI in all plugins to their latest versions OR install WPDI as a mu-plugin to control the version. ' .
-				'See: <a href="https://github.com/stracker-phil/wpdi/blob/main/docs/mu-plugin-installation.md" target="_blank">MU-Plugin Installation Guide</a></p>',
-				esc_html( $module_version ),
-				esc_html( WPDI_VERSION )
-			),
-			'WPDI Version Conflict'
+		$message = sprintf(
+			'WPDI Version Conflict: requires v%s, but v%s is already loaded. '
+			. 'Use a scoper, update WPDI in all plugins, or install as a mu-plugin. '
+			. 'See: https://github.com/stracker-phil/wpdi/blob/main/docs/mu-plugin-installation.md',
+			$module_version,
+			WPDI_VERSION
 		);
+
+		if ( function_exists( 'wp_die' ) ) {
+			wp_die( esc_html( $message ), 'WPDI Version Conflict' );
+		}
+
+		throw new RuntimeException( $message );
 	}
 }
 

@@ -107,7 +107,7 @@ class Compiler {
 
 		$content = "<?php\n\n";
 		$content .= "// Auto-generated WPDI cache - do not edit\n";
-		$content .= "// Generated: " . current_time( 'Y-m-d H:i:s' ) . "\n";
+		$content .= "// Generated: " . date( 'Y-m-d H:i:s' ) . "\n";
 		$content .= "// Contains: " . count( $class_map ) . " discovered classes\n";
 		$content .= "// Format: class => [path, mtime, dependencies]\n\n";
 		$content .= "return " . var_export( $class_map, true ) . ";\n";
