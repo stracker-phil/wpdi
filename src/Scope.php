@@ -16,10 +16,7 @@ require_once __DIR__ . '/Compiler.php';
 require_once __DIR__ . '/Cache_Manager.php';
 require_once __DIR__ . '/Resolver.php';
 require_once __DIR__ . '/Container.php';
-
-if ( defined( 'WP_CLI' ) && WP_CLI ) {
-	require_once __DIR__ . '/Commands/cli.php';
-}
+Commands\Cli::register_commands();
 
 /**
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
