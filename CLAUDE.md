@@ -1,435 +1,85 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Lightweight, WordPress-native dependency injection container with PSR-11 compatibility, zero-config autowiring, and production-optimized caching. Target: WordPress plugins/themes that want clean DI without heavyweight frameworks.
 
-## Project Overview
-
-**WPDI** is a lightweight, WordPress-native dependency injection container library. It provides PSR-11 compatible dependency injection with WordPress coding standards, zero configuration autowiring, and production-optimized caching.
-
-**Target Use Case**: WordPress plugins and themes that want clean dependency injection without heavyweight frameworks.
-
-**PHP Version**: Requires PHP 7.4+ (as specified in `composer.json`). Code must not use PHP 8.0+ exclusive features.
-
-## Development Commands
-
-### Testing
+## Commands
 
 ```bash
-# Run all tests
-ddev composer test
-# or
-ddev exec vendor/bin/phpunit
+# All commands run inside DDEV (PHP 7.4 environment)
+ddev composer test                  # Run all tests
+ddev composer cs                    # Check WordPress coding standards
+ddev composer cs-fix                # Auto-fix coding standards
+ddev composer install               # Install dependencies
+ddev composer coverage              # Generate HTML coverage report
 
-# Run specific test file
+# Targeted testing
 ddev exec vendor/bin/phpunit tests/ContainerTest.php
-
-# Run with test names (testdox format)
-ddev exec vendor/bin/phpunit --testdox
-
-# Run specific test method
 ddev exec vendor/bin/phpunit --filter test_autowires_class_with_dependency
+ddev exec vendor/bin/phpunit --testdox
 ```
 
-### Code Standards
-
-```bash
-# Check WordPress coding standards
-ddev composer cs
-
-# Auto-fix coding standards
-ddev composer cs-fix
-```
-
-### Dependencies
-
-```bash
-# Install dependencies (including dev)
-ddev composer install
-
-# Update dependencies
-ddev composer update
-```
-
-## Architecture
-
-### Core Components
-
-**1. Container (`src/Container.php`)**
-
-- PSR-11 dependency injection container
-- Autowiring via PHP reflection
-- Singleton caching by default
-- Config loading from `wpdi-config.php`
-- Circular dependency detection with helpful error messages
-
-**2. Resolver (`src/Resolver.php`)**
-
-- Limited API wrapper around Container
-- Exposes only `get()` and `has()` methods
-- Used by factory functions in wpdi-config.php
-- Used by Scope::bootstrap() for consistent API
-- Cached per Container (single instance via Container::resolver())
-
-**3. Scope (`src/Scope.php`)**
-
-- Base class for WordPress modules (plugins/themes)
-- Composition root pattern - only place with service resolution
-- Constructor takes `$scope_file` (use `__FILE__`), creates Container, initializes it, then calls bootstrap(Resolver)
-- Container is local variable only (not stored as property)
-- bootstrap() receives Resolver with limited API (no direct Container access)
-- **autowiring_paths()** - Configurable method that returns array of relative paths for auto-discovery (default: `['src']`)
-- Auto-discovery scans paths returned by `autowiring_paths()` for classes
-
-**4. Auto_Discovery (`src/Auto_Discovery.php`)**
-
-- Scans `src/` directory for concrete classes
-- Tokenizes PHP files to extract namespaces and class names
-- PHP 8+ compatibility: handles `T_NAME_QUALIFIED` token
-- Filters to only instantiable, concrete classes
-- Returns class => metadata mapping (path, mtime, dependencies)
-- Extracts constructor dependencies via reflection for future optimizations
-
-**5. Compiler (`src/Compiler.php`)**
-
-- Caches **class => metadata mapping** (path, mtime, dependencies)
-- Creates `cache/wpdi-container.php` with simple array export
-- Production optimization: skips auto-discovery on cached systems
-- Metadata enables efficient mtime-based staleness detection
-
-**6. Cache_Manager (`src/Cache_Manager.php`)**
-
-- Handles all cache operations (loading, staleness checks, incremental updates)
-- Separates cache concerns from DI core (Single Responsibility Principle)
-- Implements incremental updates: only re-parses modified files
-- Discovers new dependencies transitively when referenced by cached code
-
-**7. WP-CLI Commands (`src/Commands/`)**
-
-- **cli.php** - Registration file that loads and registers all commands
-- **Compile_Command.php** - Compiles container cache for production
-- **Discover_Command.php** - Discovers and lists classes with metadata
-- **Clear_Command.php** - Clears compiled cache files
-- Each command follows Single Responsibility Principle
-
-**8. Exception Hierarchy (`src/Exceptions/`)**
+## Project Structure
 
 ```
-WPDI_Exception (base for all library exceptions)
-└── Container_Exception (PSR-11 ContainerExceptionInterface)
-    ├── Not_Found_Exception (PSR-11 NotFoundExceptionInterface)
-    └── Circular_Dependency_Exception (circular dependency detection)
+src/
+  Container.php          # PSR-11 DI container, autowiring via reflection
+  Resolver.php           # Limited API wrapper (get/has only) for Scope and factories
+  Scope.php              # Base class for plugins/themes (composition root)
+  Auto_Discovery.php     # Scans src/ for concrete classes via tokenization
+  Class_Inspector.php    # Extracts constructor dependencies via reflection
+  Compiler.php           # Generates cache/wpdi-container.php (metadata array)
+  Cache_Manager.php      # Incremental cache staleness detection and updates
+  version-check.php      # Multi-plugin version conflict detection
+  Commands/              # WP-CLI: compile, discover, clear
+  Exceptions/            # WPDI_Exception > Container_Exception > Not_Found / Circular_Dependency
+tests/
+  bootstrap.php          # Mocks WordPress functions (wp_get_environment_type, etc.)
+  Fixtures/              # Sample classes (circular deps, nullable params, etc.)
+  *Test.php              # PHPUnit 9.6 tests (one per src class)
+docs/                    # User-facing documentation
+adr/                     # Architectural Decision Records
 ```
 
-- `WPDI_Exception`: Base exception - catch this to handle any WPDI error
-- `Container_Exception`: PSR-11 compliant container errors
-- `Not_Found_Exception`: Thrown when service not found
-- `Circular_Dependency_Exception`: Thrown when circular dependencies detected
+## Key Patterns
 
-### Key Design Decisions
+- **Composition root**: `Scope::bootstrap(Resolver)` is the only place that resolves services. See [ADR-006](adr/006-composition-root-pattern.md).
+- **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. See [ADR-004](adr/004-zero-config-autowiring.md).
+- **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
+- **Metadata caching**: Cache stores `{path, mtime, dependencies}` per class, not closures. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
+- **Version conflict detection**: `version-check.php` prevents older WPDI from silently breaking when multiple plugins bundle it. See [ADR-008](adr/008-version-conflict-detection.md).
+- **Exception hierarchy**: `WPDI_Exception` > `Container_Exception` (PSR-11) > `Not_Found_Exception` / `Circular_Dependency_Exception`
 
-**Autowiring Strategy:**
+## Conventions
 
-- Default factories autowire via reflection: `new $class(...$dependencies)`
-- User-defined factories in `wpdi-config.php` override autowiring
-- Singletons cached in `$instances` array
-- Non-singletons created fresh each time
+- **PHP 7.4+ only** — no `mixed` types, nullsafe `?->`, `match`, union types, or named arguments. See [ADR-001](adr/001-php-74-minimum.md).
+- **WordPress coding standards** enforced by PHPCS. Tabs for indentation, `Snake_Case` classes, `snake_case` methods. `WordPress.Files.FileName` disabled for PSR-4 compatibility. See [ADR-003](adr/003-wordpress-coding-standards.md).
+- **PSR-4 autoloading**: `WPDI\` maps to `src/`, `WPDI\Tests\` maps to `tests/`. File names match class names (`Cache_Manager.php`).
+- **100% test coverage** target. Test behavior, not implementation. Fixtures loaded manually in `setUp()`.
+- **Version maintained in two places**: `composer.json` and `src/version-check.php` — both must match.
 
-**Circular Dependency Detection:**
-The Container detects circular constructor dependencies and throws a `Circular_Dependency_Exception` with a clear message:
+## Code Modification Rules
 
-```php
-// Example: ServiceA depends on ServiceB, which depends on ServiceA
-Circular_Dependency_Exception: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
-```
+**Any source file:**
+- Verify PHP 7.4 compat — run `ddev composer test`
+- No defensive checks that type hints make impossible (dead code)
 
-- Implementation: Tracks resolving classes in `$resolving` array during autowiring
-- Uses try-finally to ensure cleanup even when exceptions occur
-- Circular dependencies indicate design flaws - refactor to extract shared logic or use events
-- Can be caught specifically, or via `Container_Exception`, `WPDI_Exception`, or PSR-11 `ContainerExceptionInterface`
-
-**Cache Design:**
-
-```php
-// Cache contains class metadata for staleness detection
-return array(
-    'My_Service' => array(
-        'path'         => '/path/to/src/My_Service.php',
-        'mtime'        => 1234567890,
-        'dependencies' => array( 'My_Repository', 'My_Logger' ),
-    ),
-    'My_Repository' => array(
-        'path'         => '/path/to/src/My_Repository.php',
-        'mtime'        => 1234567891,
-        'dependencies' => array( 'My_Database' ),
-    ),
-);
-```
-
-This avoids Closure serialization (impossible with `var_export()`). On cache load, autowiring factories are recreated via reflection. The metadata includes:
-- `path`: File path for existence checking
-- `mtime`: File modification time for staleness detection (avoids checking cache file timestamp)
-- `dependencies`: Constructor dependencies for future optimizations
-
-**Cache Staleness Detection:**
-In non-production environments, each cached file's mtime is compared against the stored value. Incremental updates:
-- **Deleted files**: Removed from cache
-- **Modified files**: Re-parsed individually (no full scan)
-- **New dependencies**: Discovered when referenced by modified files
-- **Unchanged files**: Kept as-is from cache
-
-This avoids full filesystem scans - only modified files are re-parsed, and new dependencies are discovered transitively when existing code references them.
-
-**Resolver Pattern:**
-
-Both factory functions and `Scope::bootstrap()` receive a `Resolver` instance with limited API:
-
-```php
-// wpdi-config.php - factory receives Resolver
-Cache_Interface::class => fn(Resolver $r) => new Redis_Cache(
-    $r->get(Logger_Interface::class)
-)
-
-// Scope::bootstrap() - receives same Resolver type
-protected function bootstrap(Resolver $r): void {
-    $service = $r->get(My_Service::class);
-}
-```
-
-This provides:
-- Consistent API between config factories and bootstrap
-- Limited access (only `get()` and `has()`, no `bind()` or `clear()`)
-- Single cached Resolver instance per Container
-- Explicit dependency resolution without full Container exposure
-
-**Composition Root:**
-The `Scope::bootstrap()` method is the **only** place that accesses the Resolver. Services receive dependencies via constructor injection, never via service location.
-
-**Exception Handling:**
-Users can catch exceptions at multiple levels depending on their needs:
-
-```php
-// Catch specific exception type
-try {
-    $service = $container->get(MyService::class);
-} catch (Circular_Dependency_Exception $e) {
-    // Handle circular dependency specifically
-}
-
-// Catch all container exceptions (PSR-11 compliant)
-try {
-    $service = $container->get(MyService::class);
-} catch (ContainerExceptionInterface $e) {
-    // Handle any container error
-}
-
-// Catch all WPDI exceptions
-try {
-    $service = $container->get(MyService::class);
-} catch (WPDI_Exception $e) {
-    // Handle any WPDI library error
-}
-```
-
-### WordPress Integration
-
-**File Naming Convention:**
-
-- Classes: `My_Service.php` (PSR-4 style)
-- Folders: `Commands/`, `Exceptions/` (PSR-4 PascalCase matching namespaces)
-- Tests: `MyServiceTest.php` (PSR-4 style)
-- All files follow PSR-4 naming for better IDE support and autoloading compatibility
-
-**Scope.php Entry Point:**
-
-- Loads core classes manually (no autoloading)
-- Checks for `ABSPATH` to prevent direct access
-- Conditionally loads WP-CLI commands if available
-
-**WordPress Function Mocking (tests/bootstrap.php):**
-Tests mock WordPress functions like `wp_get_environment_type()`, `wp_mkdir_p()`, `current_time()` to run without WordPress installation.
-
-## Testing Philosophy
-
-Achieve 100% test coverage of all src-files, as this library must guarantee stable behavior. Test behavior, not internal implementation details.
-
-**Test Structure:**
-
-- `tests/Fixtures/` - Sample classes for testing dependency injection (includes CircularA/CircularB, nullable parameters, etc.)
-- `tests/ContainerTest.php` - Core DI functionality (autowiring, caching, configuration, circular dependencies, nullable parameters)
-- `tests/ScopeTest.php` - Module initialization
-- `tests/AutoDiscoveryTest.php` - Class scanning (including edge cases for anonymous classes, traits, empty files)
-- `tests/CompilerTest.php` - Cache generation
-- `tests/ExceptionsTest.php` - PSR-11 compliance and exception hierarchy
-
-**Fixture Loading:**
-Test fixtures are manually `require_once`'d in `setUp()` since Auto_Discovery expects loaded classes when checking with `class_exists()`.
-
-## Common Pitfalls
-
-**1. PHP 7.4 Compatibility (CRITICAL)**
-The library **must** support PHP 7.4+. Do NOT use PHP 8.0+ features:
-
-❌ **Forbidden Syntax:**
-
-- `mixed` return type (use `@return mixed` docblock instead)
-- Nullsafe operator `?->` (use ternary: `$obj ? $obj->method() : 'default'`)
-- `match` expressions (use `switch` or `if/elseif`)
-- Union types like `string|int` (use `@param string|int` docblock)
-- Named arguments
-
-✅ **Allowed:**
-
-- Nullable types: `?string`, `?callable`
-- Return type declarations: `:void`, `:bool`, `:string`, `:array`, `:object`
-- Property type hints (PHP 7.4+)
-
-**2. Auto_Discovery PHP 8 Token Compatibility**
-PHP 8 introduced `T_NAME_QUALIFIED` token for namespaces like `Foo\Bar`. When parsing namespaces, check for this token in addition to `T_STRING` and `T_NS_SEPARATOR`:
-
-```php
-if ( T_STRING === $token_type || T_NS_SEPARATOR === $token_type ||
-    ( defined( 'T_NAME_QUALIFIED' ) && T_NAME_QUALIFIED === $token_type ) ) {
-    $namespace .= $tokens[ $index ][1];
-}
-```
-
-**3. Compiler Cache Format**
-The Compiler caches **class metadata** (path, mtime, dependencies), not **bindings**. Never try to serialize Closures with `var_export()` - it will fail. The cache is loaded via `Container::load_compiled()` which rebinds classes with autowiring. The metadata enables efficient mtime-based staleness detection without checking cache file timestamp.
-
-**4. Container Type Safety**
-`Container::bind()` and `Container::get()` only accept valid class/interface names. They validate with `class_exists()` and `interface_exists()` and throw exceptions for invalid strings. This prevents magic string bugs.
-
-**5. Dead Code from Type Hints**
-Don't write defensive checks that can never be false due to type hints. Example:
-
-```php
-// ❌ BAD - is_callable() check is dead code with ?callable type hint
-public function bind( string $abstract, ?callable $factory = null ) {
-    if ( ! is_callable( $factory ) ) {  // This can NEVER be true
-        throw new Exception();
-    }
-}
-```
-
-PHP's type system validates callable before function execution. Such checks create untestable code paths.
-
-**6. Test Bootstrap WordPress Functions**
-Always mock WordPress functions in `tests/bootstrap.php`. The bootstrap must be runnable without WordPress core. Suppress expected warnings in tests with `@` operator when testing failure scenarios (e.g., write permissions).
-
-**7. Circular Dependencies Are Design Flaws**
-The Container detects and rejects circular constructor dependencies with helpful error messages. If you encounter a circular dependency exception:
-
-- **Refactor to extract shared logic** into a third service both classes can depend on
-- **Use WordPress hooks** for event-driven communication instead of direct dependencies
-- **Redesign class responsibilities** - tight circular coupling indicates poor separation of concerns
-
-Example refactoring:
-
-```php
-// ❌ BAD - Circular dependency
-class ServiceA {
-    public function __construct(ServiceB $b) {}
-}
-class ServiceB {
-    public function __construct(ServiceA $a) {}
-}
-
-// ✅ GOOD - Extract shared logic
-class SharedLogic {}
-class ServiceA {
-    public function __construct(SharedLogic $shared) {}
-}
-class ServiceB {
-    public function __construct(SharedLogic $shared) {}
-}
-```
-
-**8. WordPress Option Pattern - Singleton Caching Trap**
-Services are singletons by default - the factory runs **once** and the instance is cached forever. Passing `get_option()` values to constructors caches them at instantiation.
-
-❌ **ANTI-PATTERN**: Passing options to constructor
-```php
-// wpdi-config.php
-return array(
-    Payment_Config::class => fn( $r ) => new Payment_Config(
-        get_option( 'api_key', '' )  // ❌ Called once, cached forever!
-    ),
-);
-```
-
-**What happens**:
-1. First request: Factory runs, `get_option()` returns `"abc123"`, instance cached
-2. Admin changes option to `"xyz789"`
-3. All future requests get cached instance with old value `"abc123"`
-
-✅ **CORRECT**: WordPress coding standard pattern
-```php
-// wpdi-config.php - just instantiate (or let autowiring handle it)
-return array(
-    Payment_Config::class => fn( $r ) => new Payment_Config(),
-);
-
-// Payment_Config.php - class handles option access
-class Payment_Config {
-    public function get_api_key(): string {
-        return get_option( 'api_key', '' ); // Fresh value on each call
-    }
-}
-```
-
-**Why this is correct**:
-- Follows WordPress coding standards (classes encapsulate their option dependencies)
-- Service instance cached (good for performance)
-- Option values fetched fresh on each method call
-- Option changes reflected immediately
-
-**Exception**: Interface bindings can use `get_option()` in factory to choose implementation:
-```php
-// OK: Using option to select which implementation to instantiate
-API_Client_Interface::class => fn( $r ) => 'live' === get_option( 'environment', 'sandbox' )
-    ? new Live_Client()
-    : new Sandbox_Client(),
-```
-
-## Code Modification Guidelines
-
-**When modifying any source file:**
-
-- **Always verify PHP 7.4 compatibility** - run `ddev composer test` in PHP 7.4 environment
-- No `mixed` type hints - use docblocks instead
-- No nullsafe operator `?->` - use ternary operator
-- No PHP 8+ features without fallback/polyfill
-
-**When modifying Container:**
-
+**Container changes:**
 - Update `ContainerTest.php` with corresponding tests
-- Ensure PSR-11 compliance maintained
+- Maintain `$resolving` cleanup in try-finally for circular dependency detection
+- Ensure `clear()` resets all state including `$resolving` and `$resolver`
 - Test both autowiring and explicit binding paths
-- Avoid defensive checks that type hints make impossible
-- Maintain `$resolving` array cleanup in try-finally blocks for circular dependency detection
-- Ensure `clear()` method resets all state including `$resolving` and `$resolver`
 
-**When modifying Auto_Discovery:**
-
+**Auto_Discovery changes:**
+- Handle `T_NAME_QUALIFIED` token (PHP 8+) alongside `T_STRING` / `T_NS_SEPARATOR`
 - Test with nested directories in `tests/Fixtures/`
-- Handle both PHP 7.4 and PHP 8+ token types (`T_NAME_QUALIFIED`)
-- Ensure filters work (traits, interfaces, abstract classes excluded)
-- Verify discovered classes are actually loadable
+- Verify only concrete, instantiable classes are discovered
 
-**When modifying Compiler:**
-
-- Remember: only cache class metadata (path, mtime, dependencies), never Closures
+**Compiler changes:**
+- Only cache metadata (`path`, `mtime`, `dependencies`) — never closures
 - Update both `Compiler` and `Container::initialize()` together
-- Test cache file can be `require`'d and returns proper array structure
-- Ensure `var_export()` output is valid PHP 7.4+ syntax
-- Metadata must include: `path`, `mtime`, `dependencies`
+- Ensure `var_export()` output is valid PHP 7.4+
 
-**When adding new exceptions:**
-
-- Extend from appropriate base class in the hierarchy:
-    - Container-related: extend `Container_Exception`
-    - Library-specific: extend `WPDI_Exception`
-- Add tests to `ExceptionsTest.php` verifying the exception hierarchy
-- Update `tests/bootstrap.php` and `src/Scope.php` to load new exception file
-- Document common causes and solutions in exception docblock
-- Test exception can be caught at multiple levels (specific type, base class, interface)
+**New exceptions:**
+- Extend `Container_Exception` (container-related) or `WPDI_Exception` (library-specific)
+- Add to `ExceptionsTest.php`, `tests/bootstrap.php`, and `src/Scope.php`
+- Test catchability at multiple hierarchy levels
