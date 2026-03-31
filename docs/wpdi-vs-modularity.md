@@ -171,7 +171,7 @@ $service = $container->get( 'payment.processor' );
 | **Type safety**                | ✅ Class names enforced                    | ⚠️ Magic strings allowed  | High - IDE support         |
 | **IDE integration**            | ✅ "Go to definition" and refactoring work | ❌ String hunting required | High - debugging speed     |
 | **Behavior/config separation** | ✅ Objects only                            | ⚠️ Anything allowed       | Medium - architecture      |
-| **WP CLI support**             | ✅ list, compile, clear                    | ❌ Not available           | Medium - DevOps tooling    |
+| **WP CLI support**             | ✅ list, compile, inspect, clear            | ❌ Not available           | Medium - DevOps tooling    |
 | **Singleton pattern**          | ✅ Default                                 | ✅ ServiceModule           | Low - standard feature     |
 | **Service extensions**         | ❌ Not available                           | ✅ @instanceof pattern     | Medium - if needed         |
 | **Multi-package**              | ❌ Single container                        | ✅ Package::connect()      | Low - rare use case        |

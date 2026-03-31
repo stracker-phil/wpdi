@@ -77,6 +77,44 @@ Manual configurations: 2
   - Cache_Interface
 ```
 
+## wp di inspect
+
+Inspect a class and display its dependency tree.
+
+**Synopsis:**
+
+```bash
+wp di inspect <class> [--path=<path>] [--autowiring-paths=<paths>] [--depth=<depth>]
+```
+
+**Options:**
+
+- `<class>` - Class or interface name to inspect (short or fully-qualified)
+- `--path=<path>` - Module directory (default: current directory)
+- `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
+- `--depth=<depth>` - Maximum tree depth to display (default: unlimited)
+
+Short class names are resolved automatically by scanning the autodiscovery paths. If the name is ambiguous (exists in multiple namespaces), you'll be prompted to use the fully-qualified name.
+
+**Example:**
+
+```
+$ wp di inspect Payment_Gateway
+
+Path: src/Payment_Gateway.php
+
+Payment_Gateway    class        MyPlugin\Services
+├── $validator     class        MyPlugin\Services\Payment_Validator
+│   └── $logger    interface    MyPlugin\Contracts\Logger_Interface
+└── $config        class        MyPlugin\Services\Payment_Config
+```
+
+The output shows:
+- **File path** of the inspected class
+- **Dependency tree** with parameter names, types, and namespaces
+- **Warnings** for unbound interfaces or abstract classes
+- **Circular dependency** markers when detected
+
 ## wp di clear
 
 Clear compiled cache.
@@ -138,6 +176,12 @@ ls -la cache/wpdi-container.php
 ### Debugging
 
 ```bash
+# Inspect a specific service's dependency tree
+wp di inspect Payment_Gateway
+
+# Inspect with depth limit
+wp di inspect Payment_Gateway --depth=2
+
 # Clear and re-list
 wp di clear
 wp di list

@@ -68,10 +68,14 @@ class Plugin_Integration_Test extends WP_UnitTestCase {
 
         $this->container = new WPDI\Container();
 
-        // Override with test implementations
+        // Override with test implementations (simple and contextual)
         $this->container->load_config( array(
             Logger_Interface::class => fn( $r ) => new Test_Logger(),
             API_Client::class       => fn( $r ) => new Mock_API_Client(),
+            Cache_Interface::class  => array(
+                '$db_cache' => fn( $r ) => new Test_DB_Cache(),
+                ''          => fn( $r ) => new Test_File_Cache(),
+            ),
         ) );
 
         // Create a temporary scope file for testing

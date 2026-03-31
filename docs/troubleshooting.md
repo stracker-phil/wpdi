@@ -121,11 +121,34 @@ services:
       - ../cache:/var/www/html/.ddev/wordpress/wp-content/plugins/${DDEV_PROJECT}/cache:rw
 ```
 
+## Contextual Binding Not Matching
+
+**Error:** `No contextual binding for 'Cache_Interface' matching parameter '$my_cache' and no default '' binding defined`
+
+**Causes:**
+
+- Parameter name doesn't match any key in the contextual binding array
+- No default (`''`) key defined
+
+**Fix:** Either add a matching `'$my_cache'` key or add a `''` default:
+
+```php
+return array(
+    Cache_Interface::class => array(
+        '$my_cache' => fn( $r ) => new Redis_Cache(),  // Add matching key
+        ''          => fn( $r ) => new Redis_Cache(),   // Or add a default
+    ),
+);
+```
+
 ## Debugging
 
 ```bash
 # See all services
 wp di list
+
+# Inspect a service's dependency tree
+wp di inspect Payment_Gateway
 
 # Clear cache
 wp di clear
@@ -136,6 +159,7 @@ wp di clear
 - [ ] Files in `src/` directory?
 - [ ] File names match class names? (`My_Service.php`)
 - [ ] Interfaces bound in `wpdi-config.php`?
+- [ ] Contextual binding keys prefixed with `$`? (e.g. `'$db_cache'`)
 - [ ] No circular dependencies?
 - [ ] Not passing options to constructors?
 - [ ] Container initialized after `plugins_loaded`?

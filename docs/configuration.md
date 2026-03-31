@@ -92,6 +92,47 @@ return array(
 
 Any service depending on `Cache_Interface` receives `Redis_Cache`.
 
+## Contextual Bindings
+
+When multiple services need different implementations of the same interface, use contextual bindings. Instead of a single factory, provide an array of factories keyed by the constructor parameter name (prefixed with `$`):
+
+```php
+<?php
+// wpdi-config.php
+return array(
+    Cache_Interface::class => array(
+        '$db_cache'   => fn( $r ) => new Redis_Cache(),
+        '$file_cache' => fn( $r ) => new File_Cache(),
+        ''            => fn( $r ) => new Redis_Cache(),  // Default
+    ),
+);
+```
+
+Each parameter name in the consuming class determines which factory is used:
+
+```php
+class Report_Service {
+    public function __construct(
+        Cache_Interface $db_cache,    // Gets Redis_Cache (matches '$db_cache')
+        Cache_Interface $file_cache   // Gets File_Cache (matches '$file_cache')
+    ) {}
+}
+
+class Notification_Service {
+    public function __construct(
+        Cache_Interface $cache        // Gets Redis_Cache (no match, uses default '')
+    ) {}
+}
+```
+
+### Rules
+
+- **Keys must start with `$`** to make it clear they refer to variable names, e.g. `'$db_cache'`
+- **Default key is `''`** (empty string) — used when no parameter name matches
+- **No default + no match = error** — if no `''` key is defined and the parameter name doesn't match any key, a `Container_Exception` is thrown
+- **Each branch is a singleton** — instances are cached separately per branch, so `$db_cache` and `$file_cache` produce different singleton instances
+- **Calling `$container->get()` directly** on a contextual interface uses the `''` default branch (or throws if none defined)
+
 ## WordPress Options
 
 Services are **singletons** - factories run once, instances are cached.

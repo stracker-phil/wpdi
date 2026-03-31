@@ -44,7 +44,7 @@ adr/                     # Architectural Decision Records
 ## Key Patterns
 
 - **Composition root**: `Scope::bootstrap(Resolver)` is the only place that resolves services. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
-- **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. See [ADR-004](adr/004-zero-config-autowiring.md).
+- **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. Contextual bindings use `'$param_name'`-keyed arrays for multiple implementations of the same interface. See [ADR-004](adr/004-zero-config-autowiring.md), [ADR-010](adr/010-contextual-bindings.md).
 - **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
 - **Metadata caching**: Cache stores `{path, mtime, dependencies}` per class, not closures. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
 - **Version conflict detection**: `version-check.php` prevents older WPDI from silently breaking when multiple plugins bundle it. See [ADR-008](adr/008-version-conflict-detection.md).
@@ -67,7 +67,7 @@ adr/                     # Architectural Decision Records
 **Container changes:**
 - Update `ContainerTest.php` with corresponding tests
 - Maintain `$resolving` cleanup in try-finally for circular dependency detection
-- Ensure `clear()` resets all state including `$resolving` and `$resolver`
+- Ensure `clear()` resets all state including `$resolving`, `$resolver`, and `$contextual_bindings`
 - Test both autowiring and explicit binding paths
 
 **Auto_Discovery changes:**
