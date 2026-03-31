@@ -15,3 +15,4 @@ The `Compiler` caches class metadata (path, mtime, dependencies) as a plain PHP 
 - Cache file is a simple `var_export()` array — no serialization issues
 - Production: zero filesystem overhead after initial compile (`wp di compile`)
 - Development: per-file mtime checks, not full directory scans
+- Environment type is injected into `Cache_Manager` via `Scope::environment()` — no hard dependency on `wp_get_environment_type()`

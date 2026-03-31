@@ -8,12 +8,14 @@ namespace WPDI;
 class Cache_Manager {
 	private string $base_path;
 	private array $autowiring_paths;
+	private string $environment;
 	private Compiler $compiler;
 	private Class_Inspector $inspector;
 
-	public function __construct( string $base_path, array $autowiring_paths = array( 'src' ), ?Class_Inspector $inspector = null ) {
+	public function __construct( string $base_path, array $autowiring_paths = array( 'src' ), string $environment = 'development', ?Class_Inspector $inspector = null ) {
 		$this->base_path        = $base_path;
 		$this->autowiring_paths = $this->normalize_paths( $base_path, $autowiring_paths );
+		$this->environment      = $environment;
 		$this->compiler         = new Compiler( $base_path );
 		$this->inspector        = $inspector ?? new Class_Inspector();
 	}
@@ -57,7 +59,7 @@ class Cache_Manager {
 
 		$cached_map = $this->compiler->load();
 
-		if ( 'production' !== wp_get_environment_type() ) {
+		if ( 'production' !== $this->environment ) {
 			return $this->update_if_stale( $cached_map, $scope_file );
 		}
 

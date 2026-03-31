@@ -24,17 +24,18 @@ ddev exec vendor/bin/phpunit --testdox
 src/
   Container.php          # PSR-11 DI container, autowiring via reflection
   Resolver.php           # Limited API wrapper (get/has only) for Scope and factories
-  Scope.php              # Base class for plugins/themes (composition root)
+  Scope.php              # Base class for plugins/themes (composition root, overridable environment())
   Auto_Discovery.php     # Scans src/ for concrete classes via tokenization
   Class_Inspector.php    # Extracts constructor dependencies via reflection
   Compiler.php           # Generates cache/wpdi-container.php (metadata array)
   Cache_Manager.php      # Incremental cache staleness detection and updates
   version-check.php      # Multi-plugin version conflict detection
-  Commands/              # WP-CLI: compile, discover, clear
+  Commands/              # WP-CLI: compile, list, inspect, clear
   Exceptions/            # WPDI_Exception > Container_Exception > Not_Found / Circular_Dependency
 tests/
-  bootstrap.php          # Mocks WordPress functions (wp_get_environment_type, etc.)
+  bootstrap.php          # Mocks WordPress functions (wp_mkdir_p, esc_html, etc.)
   Fixtures/              # Sample classes (circular deps, nullable params, etc.)
+  Commands/              # WP-CLI command tests
   *Test.php              # PHPUnit 9.6 tests (one per src class)
 docs/                    # User-facing documentation
 adr/                     # Architectural Decision Records
@@ -42,7 +43,7 @@ adr/                     # Architectural Decision Records
 
 ## Key Patterns
 
-- **Composition root**: `Scope::bootstrap(Resolver)` is the only place that resolves services. See [ADR-006](adr/006-composition-root-pattern.md).
+- **Composition root**: `Scope::bootstrap(Resolver)` is the only place that resolves services. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
 - **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. See [ADR-004](adr/004-zero-config-autowiring.md).
 - **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
 - **Metadata caching**: Cache stores `{path, mtime, dependencies}` per class, not closures. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).

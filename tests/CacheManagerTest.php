@@ -77,8 +77,6 @@ class CacheManagerTest extends TestCase {
 	 * THEN it returns cached map without checking staleness
 	 */
 	public function test_returns_cached_map_in_production(): void {
-		putenv( 'WP_ENVIRONMENT_TYPE=production' );
-
 		$cached_data = array(
 			SimpleClass::class => array(
 				'path'         => '/fake/path.php',
@@ -88,7 +86,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
 		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
 
 		$this->assertEquals( $cached_data, $result );

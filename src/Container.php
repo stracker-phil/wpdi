@@ -118,8 +118,9 @@ class Container implements ContainerInterface {
 	 *
 	 * @param string $scope_file Path to the Scope implementation file (e.g., __FILE__)
 	 * @param array  $autowiring_paths Relative paths to scan for autowirable classes (relative to dirname($scope_file))
+	 * @param string $environment Environment type for cache behavior ('production' skips staleness checks).
 	 */
-	public function initialize( string $scope_file, array $autowiring_paths = array( 'src' ) ): void {
+	public function initialize( string $scope_file, array $autowiring_paths = array( 'src' ), string $environment = 'development' ): void {
 		$base_path   = dirname( $scope_file );
 		$config_file = $base_path . '/wpdi-config.php';
 
@@ -129,7 +130,7 @@ class Container implements ContainerInterface {
 		}
 
 		// Delegate cache management
-		$cache_manager = new Cache_Manager( $base_path, $autowiring_paths );
+		$cache_manager = new Cache_Manager( $base_path, $autowiring_paths, $environment );
 		$class_map     = $cache_manager->get_class_map( $scope_file );
 
 		$this->load_compiled( $class_map );

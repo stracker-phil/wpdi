@@ -40,13 +40,29 @@ abstract class Scope {
 	}
 
 	/**
+	 * Determine the current environment type
+	 *
+	 * Override to provide a custom environment value (e.g., in non-WordPress contexts).
+	 * In production, the cache is served as-is without staleness checks.
+	 *
+	 * @return string Environment type ('production', 'development', 'staging', 'local').
+	 */
+	protected function environment(): string {
+		if ( function_exists( 'wp_get_environment_type' ) ) {
+			return wp_get_environment_type();
+		}
+
+		return 'development';
+	}
+
+	/**
 	 * Initialize the module
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
 	public function __construct( string $scope_file ) {
 		$container = new Container();
-		$container->initialize( $scope_file, $this->autowiring_paths() );
+		$container->initialize( $scope_file, $this->autowiring_paths(), $this->environment() );
 		$this->bootstrap( $container->resolver() );
 	}
 

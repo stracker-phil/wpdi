@@ -14,4 +14,4 @@ Service location (calling the container from anywhere) is an anti-pattern. The c
 
 - Service location is structurally prevented (no container reference leaks)
 - `bootstrap()` is the single composition root
-- Plugin authors extend `Scope` and override `bootstrap()` and optionally `autowiring_paths()`
+- Plugin authors extend `Scope` and override `bootstrap()` and optionally `autowiring_paths()` or `environment()`
