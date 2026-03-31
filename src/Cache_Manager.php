@@ -24,7 +24,7 @@ class Cache_Manager {
 	 * Normalize relative paths to absolute paths
 	 *
 	 * @param string $base_path Base directory.
-	 * @param array  $paths Relative paths.
+	 * @param array  $paths     Relative paths.
 	 * @return array Absolute paths with trailing slashes removed.
 	 */
 	private function normalize_paths( string $base_path, array $paths ): array {

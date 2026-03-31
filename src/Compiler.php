@@ -107,10 +107,10 @@ class Compiler {
 
 		$content = "<?php\n\n";
 		$content .= "// Auto-generated WPDI cache - do not edit\n";
-		$content .= "// Generated: " . date( 'Y-m-d H:i:s' ) . "\n";
-		$content .= "// Contains: " . count( $class_map ) . " discovered classes\n";
+		$content .= '// Generated: ' . date( 'Y-m-d H:i:s' ) . "\n";
+		$content .= '// Contains: ' . count( $class_map ) . " discovered classes\n";
 		$content .= "// Format: class => [path, mtime, dependencies]\n\n";
-		$content .= "return " . var_export( $class_map, true ) . ";\n";
+		$content .= 'return ' . var_export( $class_map, true ) . ";\n";
 
 		// Suppress warning on write failure (e.g., disk full, permissions changed)
 		return false !== @file_put_contents( $this->cache_file, $content );

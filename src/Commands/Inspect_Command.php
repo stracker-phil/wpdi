@@ -209,7 +209,8 @@ class Inspect_Command {
 
 		foreach ( $param_map as $param_name => $dep_fqcn ) {
 			$is_last    = ( $index === $count - 1 );
-			$connector  = $is_last ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 " : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
+			$connector  =
+				$is_last ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 " : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
 			$next_pad   = $is_last ? '    ' : "\xE2\x94\x82   ";
 			$row_prefix = $child_prefix . $connector;
 			$row_width  = $prefix_width + 4;
@@ -243,7 +244,7 @@ class Inspect_Command {
 				);
 			}
 
-			$index++;
+			$index ++;
 		}
 	}
 
@@ -346,8 +347,8 @@ class Inspect_Command {
 	 * Scans autodiscovery paths for classes whose short name matches the input.
 	 * Errors if no match or multiple ambiguous matches are found.
 	 *
-	 * @param string $short_name      Short class name.
-	 * @param string $path            Module base path.
+	 * @param string $short_name       Short class name.
+	 * @param string $path             Module base path.
 	 * @param array  $autowiring_paths Autowiring paths.
 	 * @return string Resolved FQCN.
 	 */

@@ -14,11 +14,11 @@ use ReflectionParameter;
 use ReflectionNamedType;
 
 class Container implements ContainerInterface {
-	private array $bindings            = array();
+	private array $bindings = array();
 	private array $contextual_bindings = array();
-	private array $instances           = array();
-	private array $resolving           = array();
-	private ?Resolver $resolver        = null;
+	private array $instances = array();
+	private array $resolving = array();
+	private ?Resolver $resolver = null;
 
 	/**
 	 * Bind a service to the container
@@ -93,7 +93,7 @@ class Container implements ContainerInterface {
 	 * Accepts an array of factories keyed by parameter name (prefixed with '$')
 	 * or an empty string for the default. Each branch is cached as a separate singleton.
 	 *
-	 * @param string $abstract Interface or class name.
+	 * @param string $abstract  Interface or class name.
 	 * @param array  $factories Map of '$param_name' => callable factories.
 	 */
 	public function bind_contextual( string $abstract, array $factories ): void {
@@ -158,9 +158,11 @@ class Container implements ContainerInterface {
 	/**
 	 * Initialize container with auto-discovery
 	 *
-	 * @param string $scope_file Path to the Scope implementation file (e.g., __FILE__)
-	 * @param array  $autowiring_paths Relative paths to scan for autowirable classes (relative to dirname($scope_file))
-	 * @param string $environment Environment type for cache behavior ('production' skips staleness checks).
+	 * @param string $scope_file       Path to the Scope implementation file (e.g., __FILE__)
+	 * @param array  $autowiring_paths Relative paths to scan for autowirable classes (relative to
+	 *                                 dirname($scope_file))
+	 * @param string $environment      Environment type for cache behavior ('production' skips
+	 *                                 staleness checks).
 	 */
 	public function initialize( string $scope_file, array $autowiring_paths = array( 'src' ), string $environment = 'development' ): void {
 		$base_path   = dirname( $scope_file );
@@ -251,7 +253,7 @@ class Container implements ContainerInterface {
 	/**
 	 * Resolve a contextual binding by parameter name
 	 *
-	 * @param string $abstract Interface or class name.
+	 * @param string $abstract   Interface or class name.
 	 * @param string $param_name Parameter name prefixed with '$', or empty string for default.
 	 * @return mixed Service instance.
 	 */
@@ -295,6 +297,7 @@ class Container implements ContainerInterface {
 			// Check for contextual binding first
 			if ( isset( $this->contextual_bindings[ $type_name ] ) ) {
 				$param_name = '$' . $parameter->getName();
+
 				return $this->resolve_contextual_binding( $type_name, $param_name );
 			}
 

@@ -34,8 +34,8 @@ class Compile_Command {
 	 *     wp di compile --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path            = $assoc_args['path'] ?? getcwd();
-		$force           = isset( $assoc_args['force'] );
+		$path             = $assoc_args['path'] ?? getcwd();
+		$force            = isset( $assoc_args['force'] );
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
 		if ( ! is_dir( $path ) ) {

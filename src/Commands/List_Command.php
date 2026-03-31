@@ -20,6 +20,7 @@ class List_Command {
 	public function __construct() {
 		$this->inspector = new Class_Inspector();
 	}
+
 	/**
 	 * List all injectable services
 	 *
