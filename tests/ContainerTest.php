@@ -18,6 +18,11 @@ use WPDI\Tests\Fixtures\AbstractClass;
 use WPDI\Tests\Fixtures\ClassWithDefaultValue;
 use WPDI\Tests\Fixtures\CircularA;
 use WPDI\Tests\Fixtures\ClassWithNullableParameter;
+use WPDI\Tests\Fixtures\CacheInterface;
+use WPDI\Tests\Fixtures\DB_Cache;
+use WPDI\Tests\Fixtures\File_Cache;
+use WPDI\Tests\Fixtures\ClassWithContextualDeps;
+use WPDI\Tests\Fixtures\ClassWithUnmatchedContextualDep;
 
 /**
  * @covers \WPDI\Container
@@ -604,6 +609,174 @@ PHP;
 
 		// Should still be able to autowire after clear
 		$this->assertTrue( $this->container->has( SimpleClass::class ) );
+	}
+
+	// ========================================
+	// Contextual Binding Tests
+	// ========================================
+
+	/**
+	 * GIVEN an interface with contextual bindings keyed by parameter name
+	 * WHEN a class with matching parameter names is autowired
+	 * THEN each parameter receives the correct implementation
+	 */
+	public function test_contextual_binding_resolves_by_parameter_name(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache'   => fn() => new DB_Cache(),
+				'$file_cache' => fn() => new File_Cache(),
+			)
+		);
+
+		$instance = $this->container->get( ClassWithContextualDeps::class );
+
+		$this->assertInstanceOf( DB_Cache::class, $instance->get_db_cache() );
+		$this->assertInstanceOf( File_Cache::class, $instance->get_file_cache() );
+	}
+
+	/**
+	 * GIVEN a contextual binding with a default (empty string key)
+	 * WHEN a parameter name doesn't match any specific key
+	 * THEN the default factory is used
+	 */
+	public function test_contextual_binding_uses_default_for_unmatched_param(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache' => fn() => new DB_Cache(),
+				''          => fn() => new File_Cache(),
+			)
+		);
+
+		$instance = $this->container->get( ClassWithUnmatchedContextualDep::class );
+
+		$this->assertInstanceOf( File_Cache::class, $instance->get_cache() );
+	}
+
+	/**
+	 * GIVEN a contextual binding without a default
+	 * WHEN a parameter name doesn't match any key
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_contextual_binding_throws_without_default(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache' => fn() => new DB_Cache(),
+			)
+		);
+
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'No contextual binding' );
+
+		$this->container->get( ClassWithUnmatchedContextualDep::class );
+	}
+
+	/**
+	 * GIVEN contextual bindings for an interface
+	 * WHEN the same class is resolved multiple times
+	 * THEN each branch returns the same singleton instance
+	 */
+	public function test_contextual_binding_caches_singletons_per_branch(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache'   => fn() => new DB_Cache(),
+				'$file_cache' => fn() => new File_Cache(),
+			)
+		);
+
+		$instance1 = $this->container->get( ClassWithContextualDeps::class );
+
+		// Clear the autowired class singleton to force re-resolution of params
+		// But contextual singletons should persist
+		$this->assertInstanceOf( DB_Cache::class, $instance1->get_db_cache() );
+		$this->assertInstanceOf( File_Cache::class, $instance1->get_file_cache() );
+		$this->assertNotSame( $instance1->get_db_cache(), $instance1->get_file_cache() );
+
+		// Resolve again — ClassWithContextualDeps is itself a singleton
+		$instance2 = $this->container->get( ClassWithContextualDeps::class );
+		$this->assertSame( $instance1, $instance2 );
+	}
+
+	/**
+	 * GIVEN a contextual binding with a default
+	 * WHEN get() is called directly on the interface
+	 * THEN the default factory is used
+	 */
+	public function test_contextual_binding_direct_get_uses_default(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache' => fn() => new DB_Cache(),
+				''          => fn() => new File_Cache(),
+			)
+		);
+
+		$result = $this->container->get( CacheInterface::class );
+
+		$this->assertInstanceOf( File_Cache::class, $result );
+	}
+
+	/**
+	 * GIVEN a contextual binding without a default
+	 * WHEN get() is called directly on the interface
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_contextual_binding_direct_get_throws_without_default(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'$db_cache' => fn() => new DB_Cache(),
+			)
+		);
+
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'No contextual binding' );
+
+		$this->container->get( CacheInterface::class );
+	}
+
+	/**
+	 * GIVEN a config array with both simple and contextual bindings
+	 * WHEN load_config() is called
+	 * THEN both binding types are registered correctly
+	 */
+	public function test_load_config_handles_contextual_bindings(): void {
+		$config = array(
+			LoggerInterface::class => fn() => new ArrayLogger(),
+			CacheInterface::class  => array(
+				'$db_cache'   => fn() => new DB_Cache(),
+				'$file_cache' => fn() => new File_Cache(),
+				''            => fn() => new DB_Cache(),
+			),
+		);
+
+		$this->container->load_config( $config );
+
+		$this->assertTrue( $this->container->has( LoggerInterface::class ) );
+		$this->assertTrue( $this->container->has( CacheInterface::class ) );
+
+		$this->assertInstanceOf( ArrayLogger::class, $this->container->get( LoggerInterface::class ) );
+		$this->assertInstanceOf( DB_Cache::class, $this->container->get( CacheInterface::class ) );
+	}
+
+	/**
+	 * GIVEN an invalid contextual binding key (no $ prefix)
+	 * WHEN bind_contextual() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_contextual_binding_validates_keys(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'Invalid contextual binding key' );
+
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array(
+				'no_dollar' => fn() => new DB_Cache(),
+			)
+		);
 	}
 
 	// ========================================

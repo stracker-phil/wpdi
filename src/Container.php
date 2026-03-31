@@ -14,10 +14,11 @@ use ReflectionParameter;
 use ReflectionNamedType;
 
 class Container implements ContainerInterface {
-	private array $bindings = array();
-	private array $instances = array();
-	private array $resolving = array();
-	private ?Resolver $resolver = null;
+	private array $bindings            = array();
+	private array $contextual_bindings = array();
+	private array $instances           = array();
+	private array $resolving           = array();
+	private ?Resolver $resolver        = null;
 
 	/**
 	 * Bind a service to the container
@@ -63,6 +64,11 @@ class Container implements ContainerInterface {
 			return $this->resolve_binding( $id );
 		}
 
+		// Contextual binding called directly — use default branch
+		if ( isset( $this->contextual_bindings[ $id ] ) ) {
+			return $this->resolve_contextual_binding( $id, '' );
+		}
+
 		// Try autowiring
 		if ( class_exists( $id ) ) {
 			return $this->autowire( $id );
@@ -76,8 +82,40 @@ class Container implements ContainerInterface {
 	 */
 	public function has( string $id ): bool {
 		return isset( $this->bindings[ $id ] ) ||
+			isset( $this->contextual_bindings[ $id ] ) ||
 			isset( $this->instances[ $id ] ) ||
 			class_exists( $id );
+	}
+
+	/**
+	 * Bind a contextual service to the container
+	 *
+	 * Accepts an array of factories keyed by parameter name (prefixed with '$')
+	 * or an empty string for the default. Each branch is cached as a separate singleton.
+	 *
+	 * @param string $abstract Interface or class name.
+	 * @param array  $factories Map of '$param_name' => callable factories.
+	 */
+	public function bind_contextual( string $abstract, array $factories ): void {
+		if ( ! class_exists( $abstract ) && ! interface_exists( $abstract ) ) {
+			throw new Container_Exception( "'{$abstract}' must be a valid class or interface name" );
+		}
+
+		$validated = array();
+
+		foreach ( $factories as $key => $factory ) {
+			if ( '' !== $key && ! preg_match( '/^\$[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/', $key ) ) {
+				throw new Container_Exception( "Invalid contextual binding key '{$key}': must be a \$variable_name or empty string" );
+			}
+
+			if ( ! is_callable( $factory ) ) {
+				throw new Container_Exception( "Contextual binding factory for '{$abstract}[{$key}]' must be callable" );
+			}
+
+			$validated[ $key ] = $factory;
+		}
+
+		$this->contextual_bindings[ $abstract ] = $validated;
 	}
 
 	/**
@@ -85,7 +123,11 @@ class Container implements ContainerInterface {
 	 */
 	public function load_config( array $config ): void {
 		foreach ( $config as $abstract => $factory ) {
-			$this->bind( $abstract, $factory );
+			if ( is_array( $factory ) ) {
+				$this->bind_contextual( $abstract, $factory );
+			} else {
+				$this->bind( $abstract, $factory );
+			}
 		}
 	}
 
@@ -207,6 +249,39 @@ class Container implements ContainerInterface {
 	}
 
 	/**
+	 * Resolve a contextual binding by parameter name
+	 *
+	 * @param string $abstract Interface or class name.
+	 * @param string $param_name Parameter name prefixed with '$', or empty string for default.
+	 * @return mixed Service instance.
+	 */
+	private function resolve_contextual_binding( string $abstract, string $param_name ) {
+		$factories = $this->contextual_bindings[ $abstract ];
+
+		// Try exact match first, then fall back to default
+		if ( isset( $factories[ $param_name ] ) ) {
+			$key = $param_name;
+		} elseif ( isset( $factories[''] ) ) {
+			$key = '';
+		} else {
+			throw new Container_Exception(
+				"No contextual binding for '{$abstract}' matching parameter '{$param_name}' and no default '' binding defined"
+			);
+		}
+
+		$cache_key = $abstract . '::' . $key;
+
+		if ( isset( $this->instances[ $cache_key ] ) ) {
+			return $this->instances[ $cache_key ];
+		}
+
+		$instance                      = $factories[ $key ]( $this->resolver() );
+		$this->instances[ $cache_key ] = $instance;
+
+		return $instance;
+	}
+
+	/**
 	 * Resolve a single parameter
 	 *
 	 * @return mixed Resolved parameter value
@@ -216,6 +291,12 @@ class Container implements ContainerInterface {
 
 		if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
 			$type_name = $type->getName();
+
+			// Check for contextual binding first
+			if ( isset( $this->contextual_bindings[ $type_name ] ) ) {
+				$param_name = '$' . $parameter->getName();
+				return $this->resolve_contextual_binding( $type_name, $param_name );
+			}
 
 			if ( $this->has( $type_name ) ) {
 				return $this->get( $type_name );
@@ -248,10 +329,11 @@ class Container implements ContainerInterface {
 	 * Clear all bindings and instances (for testing)
 	 */
 	public function clear(): void {
-		$this->bindings  = array();
-		$this->instances = array();
-		$this->resolving = array();
-		$this->resolver  = null;
+		$this->bindings            = array();
+		$this->contextual_bindings = array();
+		$this->instances           = array();
+		$this->resolving           = array();
+		$this->resolver            = null;
 	}
 
 	/**
