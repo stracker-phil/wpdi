@@ -64,19 +64,6 @@ class InspectCommandTest extends TestCase {
 	}
 
 	/**
-	 * Get format_items call
-	 */
-	private function getFormatItemsCall(): ?array {
-		foreach ( WP_CLI::get_calls() as $call ) {
-			if ( 'format_items' === $call['method'] ) {
-				return $call;
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * GIVEN a class that does not exist
 	 * WHEN inspecting
 	 * THEN should show error
@@ -95,7 +82,7 @@ class InspectCommandTest extends TestCase {
 	/**
 	 * GIVEN a concrete class with no dependencies
 	 * WHEN inspecting
-	 * THEN should show class info and no dependencies
+	 * THEN should show Path header and single-row tree
 	 */
 	public function test_inspects_simple_concrete_class(): void {
 		$command = new Inspect_Command();
@@ -107,17 +94,19 @@ class InspectCommandTest extends TestCase {
 
 		$output = $this->getLogOutput();
 
-		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
-		$this->assertStringContainsString( 'Type:         concrete', $output );
-		$this->assertStringContainsString( 'Autowirable:  yes', $output );
-		$this->assertStringContainsString( 'no parameters', $output );
-		$this->assertStringContainsString( '(no dependencies)', $output );
+		$this->assertStringContainsString( 'Path:', $output );
+		$this->assertStringContainsString( 'SimpleClass', $output );
+		$this->assertStringContainsString( 'class', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures', $output );
+		// No tree children.
+		$this->assertStringNotContainsString( "\xE2\x94\x9C", $output );
+		$this->assertStringNotContainsString( "\xE2\x94\x94", $output );
 	}
 
 	/**
 	 * GIVEN a concrete class with a dependency
 	 * WHEN inspecting
-	 * THEN should show constructor dependencies table
+	 * THEN should show parameter name and FQCN in aligned columns
 	 */
 	public function test_inspects_class_with_dependency(): void {
 		$command = new Inspect_Command();
@@ -129,23 +118,15 @@ class InspectCommandTest extends TestCase {
 
 		$output = $this->getLogOutput();
 
-		$this->assertStringContainsString( 'Constructor Dependencies:', $output );
-
-		// Verify format_items was called with dependency info
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call );
-
-		$items = $format_call['args'][1];
-		$this->assertCount( 1, $items );
-		$this->assertEquals( '$dependency', $items[0]['parameter'] );
-		$this->assertEquals( 'concrete', $items[0]['type'] );
-		$this->assertEquals( 'autowiring', $items[0]['resolution'] );
+		$this->assertStringContainsString( '$dependency', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
+		$this->assertStringContainsString( "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80", $output );
 	}
 
 	/**
-	 * GIVEN a class with scalar default values
+	 * GIVEN a class with only scalar parameters
 	 * WHEN inspecting
-	 * THEN should show scalar params with default values
+	 * THEN should show single-row tree with no children
 	 */
 	public function test_inspects_class_with_scalar_defaults(): void {
 		$command = new Inspect_Command();
@@ -155,27 +136,17 @@ class InspectCommandTest extends TestCase {
 			array( 'path' => $this->temp_dir )
 		);
 
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call );
+		$output = $this->getLogOutput();
 
-		$items = $format_call['args'][1];
-		$this->assertCount( 2, $items );
-
-		// First param: string $name = 'default'
-		$this->assertEquals( '$name', $items[0]['parameter'] );
-		$this->assertEquals( 'scalar', $items[0]['type'] );
-		$this->assertEquals( 'value', $items[0]['resolution'] );
-		$this->assertStringContainsString( 'default', $items[0]['detail'] );
-
-		// Second param: int $count = 10
-		$this->assertEquals( '$count', $items[1]['parameter'] );
-		$this->assertEquals( 'scalar', $items[1]['type'] );
+		$this->assertStringContainsString( 'ClassWithDefaultValue', $output );
+		$this->assertStringNotContainsString( "\xE2\x94\x9C", $output );
+		$this->assertStringNotContainsString( "\xE2\x94\x94", $output );
 	}
 
 	/**
 	 * GIVEN a class with a nullable interface parameter
 	 * WHEN inspecting
-	 * THEN should show nullable info
+	 * THEN should show the parameter and interface FQCN in the tree
 	 */
 	public function test_inspects_class_with_nullable_parameter(): void {
 		$command = new Inspect_Command();
@@ -185,12 +156,11 @@ class InspectCommandTest extends TestCase {
 			array( 'path' => $this->temp_dir )
 		);
 
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call );
+		$output = $this->getLogOutput();
 
-		$items = $format_call['args'][1];
-		$this->assertCount( 1, $items );
-		$this->assertStringContainsString( 'nullable', $items[0]['detail'] );
+		$this->assertStringContainsString( '$optional', $output );
+		$this->assertStringContainsString( 'interface', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\LoggerInterface', $output );
 	}
 
 	/**
@@ -207,8 +177,7 @@ class InspectCommandTest extends TestCase {
 		);
 
 		$output = $this->getLogOutput();
-		$this->assertStringContainsString( 'Type:         interface', $output );
-		$this->assertStringContainsString( 'Autowirable:  no', $output );
+		$this->assertStringContainsString( 'interface', $output );
 
 		$warnings = $this->getWpCliCalls( 'warning' );
 		$this->assertNotEmpty( $warnings );
@@ -229,7 +198,7 @@ class InspectCommandTest extends TestCase {
 		);
 
 		$output = $this->getLogOutput();
-		$this->assertStringContainsString( 'Type:         abstract', $output );
+		$this->assertStringContainsString( 'abstract', $output );
 
 		$warnings = $this->getWpCliCalls( 'warning' );
 		$this->assertNotEmpty( $warnings );
@@ -251,14 +220,14 @@ class InspectCommandTest extends TestCase {
 
 		$output = $this->getLogOutput();
 
-		$this->assertStringContainsString( 'Dependency Tree:', $output );
 		$this->assertStringContainsString( '[CIRCULAR]', $output );
+		$this->assertStringContainsString( '$dependency', $output );
 	}
 
 	/**
 	 * GIVEN a class with chained dependencies
 	 * WHEN inspecting
-	 * THEN should show full dependency tree
+	 * THEN should show full dependency tree with param names at all levels
 	 */
 	public function test_shows_chained_dependency_tree(): void {
 		$command = new Inspect_Command();
@@ -271,16 +240,18 @@ class InspectCommandTest extends TestCase {
 		$output = $this->getLogOutput();
 
 		$this->assertStringContainsString( 'ClassWithChainedDependency', $output );
-		$this->assertStringContainsString( 'ClassWithDependency', $output );
-		$this->assertStringContainsString( 'SimpleClass', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\ClassWithDependency', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
+		// Param names appear at all levels.
+		$this->assertStringContainsString( '$dependency', $output );
 	}
 
 	/**
 	 * GIVEN a class discovered via autodiscovery
 	 * WHEN inspecting with correct path
-	 * THEN should show autodiscovery as source
+	 * THEN should show relative file path
 	 */
-	public function test_shows_autodiscovery_source(): void {
+	public function test_shows_relative_file_path(): void {
 		$this->createTestClass( 'Inspect_Discovered_Service' );
 
 		$command = new Inspect_Command();
@@ -291,15 +262,15 @@ class InspectCommandTest extends TestCase {
 		);
 
 		$output = $this->getLogOutput();
-		$this->assertStringContainsString( 'autodiscovery', $output );
+		$this->assertStringContainsString( 'Path: src/Inspect_Discovered_Service.php', $output );
 	}
 
 	/**
-	 * GIVEN a class not in autodiscovery or config
+	 * GIVEN a class outside the module path
 	 * WHEN inspecting
-	 * THEN should show external as source
+	 * THEN should show full file path
 	 */
-	public function test_shows_external_source(): void {
+	public function test_shows_full_path_for_external_class(): void {
 		$command = new Inspect_Command();
 
 		$command->__invoke(
@@ -308,13 +279,14 @@ class InspectCommandTest extends TestCase {
 		);
 
 		$output = $this->getLogOutput();
-		$this->assertStringContainsString( 'external', $output );
+		$this->assertStringContainsString( 'Path:', $output );
+		$this->assertStringContainsString( 'SimpleClass.php', $output );
 	}
 
 	/**
 	 * GIVEN a class with multiple dependencies
 	 * WHEN inspecting
-	 * THEN should list all constructor parameters
+	 * THEN should show all params with box-drawing characters
 	 */
 	public function test_inspects_class_with_multiple_dependencies(): void {
 		$command = new Inspect_Command();
@@ -324,11 +296,138 @@ class InspectCommandTest extends TestCase {
 			array( 'path' => $this->temp_dir )
 		);
 
-		$format_call = $this->getFormatItemsCall();
-		$this->assertNotNull( $format_call );
+		$output = $this->getLogOutput();
 
-		$items = $format_call['args'][1];
-		$this->assertGreaterThanOrEqual( 2, count( $items ) );
+		$this->assertStringContainsString( '$first', $output );
+		$this->assertStringContainsString( '$second', $output );
+		$this->assertStringContainsString( "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80", $output );
+		$this->assertStringContainsString( "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80", $output );
+	}
+
+	/**
+	 * GIVEN a class with multiple levels of dependencies
+	 * WHEN inspecting with --depth=1
+	 * THEN should only show direct dependencies
+	 */
+	public function test_depth_limits_tree(): void {
+		$command = new Inspect_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
+			array(
+				'path'  => $this->temp_dir,
+				'depth' => '1',
+			)
+		);
+
+		$output = $this->getLogOutput();
+
+		// Root + direct dependency shown.
+		$this->assertStringContainsString( 'ClassWithChainedDependency', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\ClassWithDependency', $output );
+		// Transitive dependency NOT shown.
+		$this->assertStringNotContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
+	}
+
+	/**
+	 * GIVEN a class with dependencies
+	 * WHEN inspecting with --depth=0 (unlimited)
+	 * THEN should show the full tree
+	 */
+	public function test_depth_zero_shows_full_tree(): void {
+		$command = new Inspect_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
+			array(
+				'path'  => $this->temp_dir,
+				'depth' => '0',
+			)
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( 'ClassWithChainedDependency', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\ClassWithDependency', $output );
+		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
+	}
+
+	/**
+	 * GIVEN a class with dependencies
+	 * WHEN inspecting
+	 * THEN tree rows should have aligned columns with type information
+	 */
+	public function test_tree_rows_contain_type_column(): void {
+		$command = new Inspect_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithNullableParameter' ),
+			array( 'path' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		// Root row has type.
+		$this->assertStringContainsString( 'class', $output );
+		// Dependency row has type.
+		$this->assertStringContainsString( 'interface', $output );
+	}
+
+	/**
+	 * GIVEN a short class name that matches one autodiscovered class
+	 * WHEN inspecting
+	 * THEN should resolve to the FQCN and display the tree
+	 */
+	public function test_resolves_short_class_name(): void {
+		$this->createNamespacedTestClass( 'App\\Services', 'MyService', 'Services' );
+
+		$command = new Inspect_Command();
+
+		$command->__invoke(
+			array( 'MyService' ),
+			array( 'path' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( 'Path:', $output );
+		$this->assertStringContainsString( 'MyService', $output );
+		$this->assertStringContainsString( 'App\\Services', $output );
+	}
+
+	/**
+	 * GIVEN a short class name that matches multiple autodiscovered classes
+	 * WHEN inspecting
+	 * THEN should list matches and error
+	 */
+	public function test_errors_on_ambiguous_short_name(): void {
+		$this->createNamespacedTestClass( 'App\\Services', 'Ambiguous_Service', 'Services' );
+		$this->createNamespacedTestClass( 'App\\Other', 'Ambiguous_Service', 'Other' );
+
+		$command = new Inspect_Command();
+
+		$this->expectException( 'WP_CLI_Exception' );
+
+		$command->__invoke(
+			array( 'Ambiguous_Service' ),
+			array( 'path' => $this->temp_dir )
+		);
+	}
+
+	/**
+	 * GIVEN a short name that matches no autodiscovered class
+	 * WHEN inspecting
+	 * THEN should show error
+	 */
+	public function test_errors_on_unresolvable_short_name(): void {
+		$command = new Inspect_Command();
+
+		$this->expectException( 'WP_CLI_Exception' );
+
+		$command->__invoke(
+			array( 'NonexistentShortName' ),
+			array( 'path' => $this->temp_dir )
+		);
 	}
 
 	/**
@@ -345,6 +444,33 @@ PHP;
 		file_put_contents( $file_path, $class_content );
 
 		if ( ! class_exists( $class_name, false ) ) {
+			require_once $file_path;
+		}
+	}
+
+	/**
+	 * Create a namespaced test class file in a subdirectory and load it
+	 */
+	private function createNamespacedTestClass( string $namespace, string $class_name, string $subdir ): void {
+		$dir = $this->temp_dir . '/src/' . $subdir;
+
+		if ( ! is_dir( $dir ) ) {
+			mkdir( $dir, 0777, true );
+		}
+
+		$file_path     = $dir . '/' . $class_name . '.php';
+		$fqcn          = $namespace . '\\' . $class_name;
+		$class_content = <<<PHP
+<?php
+namespace {$namespace};
+
+class {$class_name} {
+	public function __construct() {}
+}
+PHP;
+		file_put_contents( $file_path, $class_content );
+
+		if ( ! class_exists( $fqcn, false ) ) {
 			require_once $file_path;
 		}
 	}

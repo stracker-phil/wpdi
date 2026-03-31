@@ -53,7 +53,7 @@ adr/                     # Architectural Decision Records
 ## Conventions
 
 - **PHP 7.4+ only** — no `mixed` types, nullsafe `?->`, `match`, union types, or named arguments. See [ADR-001](adr/001-php-74-minimum.md).
-- **WordPress coding standards** enforced by PHPCS. Tabs for indentation, `Snake_Case` classes, `snake_case` methods. `WordPress.Files.FileName` disabled for PSR-4 compatibility. See [ADR-003](adr/003-wordpress-coding-standards.md).
+- **WordPress coding standards** enforced by PHPCS. Tabs for indentation, `Snake_Case` classes, `snake_case` methods. `WordPress.Files.FileName` disabled for PSR-4 compatibility. Always use `use` imports — never inline FQNs in implementation code. See [ADR-003](adr/003-wordpress-coding-standards.md).
 - **PSR-4 autoloading**: `WPDI\` maps to `src/`, `WPDI\Tests\` maps to `tests/`. File names match class names (`Cache_Manager.php`).
 - **100% test coverage** target. Test behavior, not implementation. Fixtures loaded manually in `setUp()`.
 - **Version maintained in two places**: `composer.json` and `src/version-check.php` — both must match.

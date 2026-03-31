@@ -8,7 +8,6 @@ namespace WPDI\Commands;
 use WP_CLI;
 use WPDI\Auto_Discovery;
 use WPDI\Class_Inspector;
-use ReflectionClass;
 use ReflectionNamedType;
 
 /**
@@ -22,12 +21,15 @@ class Inspect_Command {
 	}
 
 	/**
-	 * Inspect a class and explain its autowiring resolution path
+	 * Inspect a class and display its dependency tree
+	 *
+	 * Accepts a fully-qualified class name or a short (unqualified) name.
+	 * Short names are resolved by scanning the autodiscovery paths.
 	 *
 	 * ## OPTIONS
 	 *
 	 * <class>
-	 * : Fully-qualified class or interface name to inspect
+	 * : Class or interface name to inspect (short or fully-qualified)
 	 *
 	 * [--path=<path>]
 	 * : Path to module directory (default: current directory)
@@ -35,37 +37,35 @@ class Inspect_Command {
 	 * [--autowiring-paths=<paths>]
 	 * : Comma-separated autowiring paths relative to module (default: src)
 	 *
+	 * [--depth=<depth>]
+	 * : Maximum tree depth to display (default: unlimited)
+	 *
 	 * ## EXAMPLES
 	 *
+	 *     wp di inspect CensusRunner
 	 *     wp di inspect 'My_Plugin\Services\Payment_Gateway'
-	 *     wp di inspect 'My_Plugin\Contracts\Logger_Interface' --path=/path/to/module
+	 *     wp di inspect Payment_Gateway --depth=2
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$class_name       = $args[0];
 		$path             = $assoc_args['path'] ?? getcwd();
+		$max_depth        = isset( $assoc_args['depth'] ) ? (int) $assoc_args['depth'] : 0;
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
+		// Resolve short class names via autodiscovery.
 		if ( ! class_exists( $class_name ) && ! interface_exists( $class_name ) ) {
-			WP_CLI::error( "Class or interface not found: {$class_name}" );
+			$class_name = $this->resolve_short_name( $class_name, $path, $autowiring_paths );
 		}
 
 		$type        = $this->inspector->get_type( $class_name );
-		$is_concrete = $this->inspector->is_concrete( $class_name );
-
-		// Determine source.
-		$source      = $this->determine_source( $class_name, $path, $autowiring_paths );
 		$config_info = $this->get_config_binding( $class_name, $path );
 
-		// Summary.
-		WP_CLI::log( "Class:        {$class_name}" );
-		WP_CLI::log( "Type:         {$type}" );
-		WP_CLI::log( 'Autowirable:  ' . ( $is_concrete ? 'yes' : 'no' ) );
-		WP_CLI::log( "Source:       {$source}" );
+		// Path header.
+		$file_path = $this->get_class_file_path( $class_name, $path );
+		WP_CLI::log( "Path: {$file_path}" );
+		WP_CLI::log( '' );
 
-		if ( $config_info ) {
-			WP_CLI::log( 'Config:       bound in wpdi-config.php' );
-		}
-
+		// Warnings.
 		if ( 'interface' === $type && ! $config_info ) {
 			WP_CLI::warning( 'Interface has no binding in wpdi-config.php - not resolvable' );
 		}
@@ -74,66 +74,37 @@ class Inspect_Command {
 			WP_CLI::warning( 'Abstract class is not instantiable' );
 		}
 
-		// Constructor parameters.
-		$params = $this->get_constructor_params( $class_name );
+		// Build and display tree.
+		$rows = array();
+		$this->collect_tree_rows( $class_name, 0, array(), $rows, '', 0, $max_depth );
+		$lines = $this->format_tree_rows( $rows );
 
-		if ( empty( $params ) ) {
-			WP_CLI::log( '' );
-			WP_CLI::log( 'Constructor:  no parameters' );
-		} else {
-			WP_CLI::log( '' );
-			WP_CLI::log( 'Constructor Dependencies:' );
-			WP_CLI\Utils\format_items( 'table', $params, array( 'parameter', 'type', 'resolution', 'detail' ) );
-		}
-
-		// Dependency tree.
-		WP_CLI::log( '' );
-		WP_CLI::log( 'Dependency Tree:' );
-
-		$tree_lines = array();
-		$this->build_dependency_tree( $class_name, $path, 0, array(), $tree_lines );
-
-		foreach ( $tree_lines as $line ) {
+		foreach ( $lines as $line ) {
 			WP_CLI::log( $line );
 		}
 	}
 
 	/**
-	 * Determine the source of a class (autodiscovery, config, or external)
+	 * Get the file path for a class using reflection
 	 *
-	 * @param string $class_name       Fully-qualified class name.
-	 * @param string $path             Module base path.
-	 * @param array  $autowiring_paths Autowiring paths.
-	 * @return string Source description.
+	 * @param string $class_name Fully-qualified class name.
+	 * @param string $base_path  Base path for relative display.
+	 * @return string File path (relative if possible).
 	 */
-	private function determine_source( string $class_name, string $path, array $autowiring_paths ): string {
-		// Check autodiscovery paths.
-		$discovery  = new Auto_Discovery();
-		$discovered = array();
+	private function get_class_file_path( string $class_name, string $base_path ): string {
+		$reflection = $this->inspector->get_reflection( $class_name );
 
-		foreach ( $autowiring_paths as $autowiring_path ) {
-			$full_path = $path . '/' . $autowiring_path;
-			if ( is_dir( $full_path ) ) {
-				$discovered = array_merge( $discovered, $discovery->discover( $full_path ) );
-			}
+		if ( ! $reflection ) {
+			return '(unknown)';
 		}
 
-		if ( isset( $discovered[ $class_name ] ) ) {
-			$relative = $this->make_relative( $discovered[ $class_name ]['path'], $path );
+		$file = $reflection->getFileName();
 
-			return "autodiscovery ({$relative})";
+		if ( ! $file ) {
+			return '(internal)';
 		}
 
-		// Check config.
-		$config_file = $path . '/wpdi-config.php';
-		if ( file_exists( $config_file ) ) {
-			$config = require $config_file;
-			if ( isset( $config[ $class_name ] ) ) {
-				return 'wpdi-config.php';
-			}
-		}
-
-		return 'external (not in autodiscovery or config)';
+		return $this->make_relative( $file, $base_path );
 	}
 
 	/**
@@ -155,12 +126,12 @@ class Inspect_Command {
 	}
 
 	/**
-	 * Get constructor parameter details for display
+	 * Get constructor parameter names mapped to their dependency class names
 	 *
 	 * @param string $class_name Fully-qualified class name.
-	 * @return array Array of parameter info for table display.
+	 * @return array Associative array of parameter name => FQCN.
 	 */
-	private function get_constructor_params( string $class_name ): array {
+	private function get_constructor_param_map( string $class_name ): array {
 		$reflection = $this->inspector->get_reflection( $class_name );
 
 		if ( ! $reflection ) {
@@ -173,105 +144,262 @@ class Inspect_Command {
 			return array();
 		}
 
-		$params = array();
+		$map = array();
 
 		foreach ( $constructor->getParameters() as $param ) {
 			$type = $param->getType();
 
 			if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
-				$type_name  = $type->getName();
-				$type_label = $this->inspector->get_type( $type_name );
-				$resolution = $this->inspector->is_concrete( $type_name ) ? 'autowiring' : 'config';
-				$detail     = $type_name;
-
-				if ( $type->allowsNull() ) {
-					$detail .= ' (nullable)';
-				}
-
-				$params[] = array(
-					'parameter'  => '$' . $param->getName(),
-					'type'       => $type_label,
-					'resolution' => $resolution,
-					'detail'     => $detail,
-				);
-			} elseif ( $type instanceof ReflectionNamedType ) {
-				$default = $this->format_default_value( $param );
-
-				$params[] = array(
-					'parameter'  => '$' . $param->getName(),
-					'type'       => 'scalar',
-					'resolution' => 'value',
-					'detail'     => $type->getName() . ' (' . $default . ')',
-				);
-			} else {
-				$params[] = array(
-					'parameter'  => '$' . $param->getName(),
-					'type'       => 'untyped',
-					'resolution' => 'value',
-					'detail'     => $this->format_default_value( $param ),
-				);
+				$map[ '$' . $param->getName() ] = $type->getName();
 			}
 		}
 
-		return $params;
+		return $map;
 	}
 
 	/**
-	 * Format a parameter's default value for display.
+	 * Recursively collect tree rows for column-aligned display
 	 *
-	 * @param \ReflectionParameter $param Reflection parameter.
-	 * @return string Formatted default value string.
+	 * Each row contains prefix (tree chars), label ($param or class name),
+	 * type (class/interface/abstract), and FQCN.
+	 *
+	 * @param string $class_name   Fully-qualified class name.
+	 * @param int    $depth        Current tree depth.
+	 * @param array  $visited      Classes already visited (circular detection).
+	 * @param array  $rows         Collected rows (by reference).
+	 * @param string $child_prefix Tree-drawing prefix for children.
+	 * @param int    $prefix_width Display width of $child_prefix.
+	 * @param int    $max_depth    Maximum depth (0 = unlimited).
 	 */
-	private function format_default_value( \ReflectionParameter $param ): string {
-		if ( $param->isDefaultValueAvailable() ) {
-			$value = $param->getDefaultValue();
+	private function collect_tree_rows(
+		string $class_name,
+		int $depth,
+		array $visited,
+		array &$rows,
+		string $child_prefix,
+		int $prefix_width,
+		int $max_depth
+	): void {
+		$type_label = $this->format_type_label( $this->inspector->get_type( $class_name ) );
 
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- CLI debug output.
-			return 'default: ' . var_export( $value, true );
+		// Root row.
+		if ( 0 === $depth ) {
+			$rows[] = array(
+				'prefix'       => '',
+				'prefix_width' => 0,
+				'label'        => $this->get_short_class_name( $class_name ),
+				'type'         => $type_label,
+				'fqcn'         => $this->get_namespace( $class_name ),
+			);
 		}
 
-		if ( $param->allowsNull() ) {
-			return 'nullable';
-		}
-
-		return 'required';
-	}
-
-	/**
-	 * Build dependency tree recursively
-	 *
-	 * @param string $class_name Fully-qualified class name.
-	 * @param string $path       Module base path.
-	 * @param int    $depth      Current tree depth.
-	 * @param array  $visited    Classes already visited (for circular detection).
-	 * @param array  $lines      Output lines (passed by reference).
-	 */
-	private function build_dependency_tree( string $class_name, string $path, int $depth, array $visited, array &$lines ): void {
-		$indent = str_repeat( '  ', $depth );
-		$prefix = 0 === $depth ? '' : '-> ';
-
-		// Circular dependency detection.
 		if ( in_array( $class_name, $visited, true ) ) {
-			$lines[] = $indent . $prefix . $class_name . ' [CIRCULAR]';
-
 			return;
 		}
-
-		$lines[] = $indent . $prefix . $class_name;
 
 		$visited[] = $class_name;
 
-		$dependencies = $this->inspector->get_dependencies( $class_name );
-
-		if ( empty( $dependencies ) ) {
-			$lines[] = $indent . '  (no dependencies)';
-
+		if ( $max_depth > 0 && $depth >= $max_depth ) {
 			return;
 		}
 
-		foreach ( $dependencies as $dep ) {
-			$this->build_dependency_tree( $dep, $path, $depth + 1, $visited, $lines );
+		$param_map = $this->get_constructor_param_map( $class_name );
+		$count     = count( $param_map );
+		$index     = 0;
+
+		foreach ( $param_map as $param_name => $dep_fqcn ) {
+			$is_last    = ( $index === $count - 1 );
+			$connector  = $is_last ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 " : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
+			$next_pad   = $is_last ? '    ' : "\xE2\x94\x82   ";
+			$row_prefix = $child_prefix . $connector;
+			$row_width  = $prefix_width + 4;
+			$dep_type   = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
+
+			if ( in_array( $dep_fqcn, $visited, true ) ) {
+				$rows[] = array(
+					'prefix'       => $row_prefix,
+					'prefix_width' => $row_width,
+					'label'        => $param_name,
+					'type'         => $dep_type,
+					'fqcn'         => $dep_fqcn . ' [CIRCULAR]',
+				);
+			} else {
+				$rows[] = array(
+					'prefix'       => $row_prefix,
+					'prefix_width' => $row_width,
+					'label'        => $param_name,
+					'type'         => $dep_type,
+					'fqcn'         => $dep_fqcn,
+				);
+
+				$this->collect_tree_rows(
+					$dep_fqcn,
+					$depth + 1,
+					$visited,
+					$rows,
+					$child_prefix . $next_pad,
+					$prefix_width + 4,
+					$max_depth
+				);
+			}
+
+			$index++;
 		}
+	}
+
+	/**
+	 * Format collected tree rows into column-aligned output lines
+	 *
+	 * @param array $rows Collected tree rows.
+	 * @return array Formatted output lines.
+	 */
+	private function format_tree_rows( array $rows ): array {
+		if ( empty( $rows ) ) {
+			return array();
+		}
+
+		$max_col1 = 0;
+		$max_col2 = 0;
+
+		foreach ( $rows as $row ) {
+			$col1_width = $row['prefix_width'] + strlen( $row['label'] );
+
+			if ( $col1_width > $max_col1 ) {
+				$max_col1 = $col1_width;
+			}
+
+			$col2_width = strlen( $row['type'] );
+
+			if ( $col2_width > $max_col2 ) {
+				$max_col2 = $col2_width;
+			}
+		}
+
+		$lines = array();
+
+		foreach ( $rows as $row ) {
+			$col1_width = $row['prefix_width'] + strlen( $row['label'] );
+			$pad1       = $max_col1 - $col1_width + 4;
+			$pad2       = $max_col2 - strlen( $row['type'] ) + 4;
+
+			$line = $row['prefix'] . $row['label']
+				. str_repeat( ' ', $pad1 )
+				. $row['type']
+				. str_repeat( ' ', $pad2 )
+				. $row['fqcn'];
+
+			$lines[] = $line;
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * Format a type string for display
+	 *
+	 * @param string $type Raw type from Class_Inspector.
+	 * @return string Display label.
+	 */
+	private function format_type_label( string $type ): string {
+		if ( 'concrete' === $type ) {
+			return 'class';
+		}
+
+		return $type;
+	}
+
+	/**
+	 * Get the short (unqualified) class name from a FQCN
+	 *
+	 * @param string $fqcn Fully-qualified class name.
+	 * @return string Short class name.
+	 */
+	private function get_short_class_name( string $fqcn ): string {
+		$pos = strrpos( $fqcn, '\\' );
+
+		if ( false === $pos ) {
+			return $fqcn;
+		}
+
+		return substr( $fqcn, $pos + 1 );
+	}
+
+	/**
+	 * Get the namespace portion of a FQCN
+	 *
+	 * @param string $fqcn Fully-qualified class name.
+	 * @return string Namespace (empty string for global namespace).
+	 */
+	private function get_namespace( string $fqcn ): string {
+		$pos = strrpos( $fqcn, '\\' );
+
+		if ( false === $pos ) {
+			return $fqcn;
+		}
+
+		return substr( $fqcn, 0, $pos );
+	}
+
+	/**
+	 * Resolve a short (unqualified) class name to its FQCN via autodiscovery
+	 *
+	 * Scans autodiscovery paths for classes whose short name matches the input.
+	 * Errors if no match or multiple ambiguous matches are found.
+	 *
+	 * @param string $short_name      Short class name.
+	 * @param string $path            Module base path.
+	 * @param array  $autowiring_paths Autowiring paths.
+	 * @return string Resolved FQCN.
+	 */
+	private function resolve_short_name( string $short_name, string $path, array $autowiring_paths ): string {
+		$discovery = new Auto_Discovery();
+		$matches   = array();
+
+		foreach ( $autowiring_paths as $autowiring_path ) {
+			$full_path = $path . '/' . $autowiring_path;
+
+			if ( ! is_dir( $full_path ) ) {
+				continue;
+			}
+
+			foreach ( array_keys( $discovery->discover( $full_path ) ) as $fqcn ) {
+				if ( $this->get_short_class_name( $fqcn ) === $short_name ) {
+					$matches[] = $fqcn;
+				}
+			}
+		}
+
+		if ( empty( $matches ) ) {
+			WP_CLI::error( "Class or interface not found: {$short_name}" );
+		}
+
+		if ( count( $matches ) > 1 ) {
+			WP_CLI::log( "Ambiguous class name '{$short_name}'. Did you mean:" );
+
+			foreach ( $matches as $match ) {
+				WP_CLI::log( "  - {$match}" );
+			}
+
+			WP_CLI::error( 'Please use a fully-qualified class name.' );
+		}
+
+		return $matches[0];
+	}
+
+	/**
+	 * Parse autowiring paths from command arguments
+	 *
+	 * @param array $assoc_args Associative arguments from WP-CLI.
+	 * @return array Autowiring paths.
+	 */
+	private function parse_autowiring_paths( array $assoc_args ): array {
+		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
+			return array( 'src' );
+		}
+
+		$paths = explode( ',', $assoc_args['autowiring-paths'] );
+
+		return array_map( 'trim', $paths );
 	}
 
 	/**
@@ -289,21 +417,5 @@ class Inspect_Command {
 		}
 
 		return $file_path;
-	}
-
-	/**
-	 * Parse autowiring paths from command arguments
-	 *
-	 * @param array $assoc_args Associative arguments from WP-CLI.
-	 * @return array Autowiring paths.
-	 */
-	private function parse_autowiring_paths( array $assoc_args ): array {
-		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
-			return array( 'src' );
-		}
-
-		$paths = explode( ',', $assoc_args['autowiring-paths'] );
-
-		return array_map( 'trim', $paths );
 	}
 }

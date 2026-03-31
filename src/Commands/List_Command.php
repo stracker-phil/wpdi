@@ -9,6 +9,8 @@ use WP_CLI;
 use WPDI\Auto_Discovery;
 use WPDI\Class_Inspector;
 
+use function WP_CLI\Utils\format_items;
+
 /**
  * List services without compiling
  */
@@ -57,7 +59,7 @@ class List_Command {
 			$full_path = $path . '/' . $autowiring_path;
 
 			if ( ! is_dir( $full_path ) ) {
-				continue; // Skip non-existent paths silently in list command
+				continue; // Skip non-existent paths silently in list command.
 			}
 
 			$discovered = $discovery->discover( $full_path );
@@ -93,7 +95,7 @@ class List_Command {
 			return;
 		}
 
-		WP_CLI\Utils\format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+		format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
 	}
 
 	/**
