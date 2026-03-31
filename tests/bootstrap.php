@@ -71,5 +71,6 @@ require_once __DIR__ . '/mocks/WP_CLI_Utils.php';
 require_once dirname( __DIR__ ) . '/src/Commands/Compile_Command.php';
 require_once dirname( __DIR__ ) . '/src/Commands/List_Command.php';
 require_once dirname( __DIR__ ) . '/src/Commands/Clear_Command.php';
+require_once dirname( __DIR__ ) . '/src/Commands/Inspect_Command.php';
 
 echo "WPDI Test Bootstrap loaded\n";
