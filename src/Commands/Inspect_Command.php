@@ -85,6 +85,10 @@ class Inspect_Command {
 		foreach ( $lines as $line ) {
 			WP_CLI::log( $line );
 		}
+
+		if ( count( $rows ) <= 1 ) {
+			WP_CLI::log( WP_CLI::colorize( '%y-- no dependencies --%n' ) );
+		}
 	}
 
 	/**
@@ -107,7 +111,14 @@ class Inspect_Command {
 			return '(internal)';
 		}
 
-		return $this->make_relative( $file, $base_path );
+		$relative = $this->make_relative( $file, $base_path );
+
+		// Strip ABSPATH prefix when the file is outside the module directory.
+		if ( defined( 'ABSPATH' ) && 0 === strpos( $relative, ABSPATH ) ) {
+			$relative = substr( $relative, strlen( ABSPATH ) );
+		}
+
+		return $relative;
 	}
 
 	/**
