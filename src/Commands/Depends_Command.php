@@ -43,7 +43,6 @@ class Depends_Command {
 	 * ## EXAMPLES
 	 *
 	 *     wp di depends LoggerInterface
-	 *     wp di dep LoggerInterface
 	 *     wp di depends 'My_Plugin\Contracts\PaymentGatewayInterface'
 	 *     wp di depends SimpleClass --autowiring-paths=src,lib
 	 */

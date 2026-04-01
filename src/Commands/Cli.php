@@ -47,8 +47,6 @@ class Cli {
 		WP_CLI::add_command( 'di list', List_Command::class );
 		WP_CLI::add_command( 'di clear', Clear_Command::class );
 		WP_CLI::add_command( 'di inspect', Inspect_Command::class );
-		WP_CLI::add_command( 'di ins', Inspect_Command::class );
 		WP_CLI::add_command( 'di depends', Depends_Command::class );
-		WP_CLI::add_command( 'di dep', Depends_Command::class );
 	}
 }
