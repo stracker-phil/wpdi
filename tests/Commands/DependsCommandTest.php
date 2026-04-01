@@ -64,19 +64,62 @@ class DependsCommandTest extends TestCase {
 	}
 
 	/**
-	 * GIVEN a class that does not exist
+	 * GIVEN a short class name that does not exist in the scan paths
 	 * WHEN finding dependents
 	 * THEN should show error
 	 */
-	public function test_shows_error_for_nonexistent_class(): void {
+	public function test_shows_error_for_nonexistent_short_name(): void {
 		$command = new Depends_Command();
 
 		$this->expectException( 'WP_CLI_Exception' );
 
 		$command->__invoke(
+			array( 'NonexistentShortName' ),
+			array( 'dir' => $this->temp_dir )
+		);
+	}
+
+	/**
+	 * GIVEN a fully-qualified class name that does not exist in any loaded class
+	 * WHEN finding dependents
+	 * THEN should show "no dependents found" (FQCN is used as-is, not resolved as a short name)
+	 */
+	public function test_shows_no_dependents_for_nonexistent_fqcn(): void {
+		$command = new Depends_Command();
+
+		$command->__invoke(
 			array( 'Nonexistent\\Class\\Name' ),
 			array( 'dir' => $this->temp_dir )
 		);
+
+		$output = $this->getLogOutput();
+		$this->assertStringContainsString( 'no dependents found', $output );
+	}
+
+	/**
+	 * GIVEN a fully-qualified interface name that is not yet autoloaded
+	 * WHEN finding dependents
+	 * THEN should correctly find classes that inject the interface via constructor
+	 */
+	public function test_finds_dependents_of_unloaded_interface_fqcn(): void {
+		$uid            = uniqid();
+		$interface_fqcn = 'Unloaded_Ns_' . $uid . '\\MyInterface_' . $uid;
+		$consumer_name  = 'Unloaded_Consumer_' . $uid;
+
+		$this->createClassWithDependency( $consumer_name, $interface_fqcn, 'service' );
+
+		$command = new Depends_Command();
+
+		$command->__invoke(
+			array( $interface_fqcn ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer_name, $output );
+		$this->assertStringContainsString( '$service', $output );
+		$this->assertStringNotContainsString( 'no dependents found', $output );
 	}
 
 	/**
@@ -316,6 +359,82 @@ class DependsCommandTest extends TestCase {
 
 		$this->assertStringContainsString( 'Dependents of SimpleClass', $output );
 		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures', $output );
+	}
+
+	/**
+	 * GIVEN a concrete class that implements an interface bound in wpdi-config.php
+	 * AND classes in the scan path inject that interface
+	 * WHEN finding dependents of the concrete class
+	 * THEN should include those classes with a "via" annotation
+	 */
+	public function test_finds_dependents_via_config_bound_interface(): void {
+		$consumer = 'Config_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		// Write wpdi-config.php binding CacheInterface → DB_Cache.
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => fn(\$r) => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\DB_Cache' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer, $output );
+		$this->assertStringContainsString( '$cache', $output );
+		$this->assertStringContainsString( 'via CacheInterface', $output );
+		$this->assertStringNotContainsString( 'no dependents found', $output );
+	}
+
+	/**
+	 * GIVEN a concrete class that implements an interface NOT in wpdi-config.php
+	 * WHEN finding dependents of the concrete class
+	 * THEN should NOT include classes that inject the interface
+	 */
+	public function test_does_not_include_via_when_interface_not_in_config(): void {
+		$consumer = 'No_Config_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		// No wpdi-config.php written — CacheInterface has no binding.
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\DB_Cache' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringNotContainsString( $consumer, $output );
+		$this->assertStringContainsString( 'no dependents found', $output );
+	}
+
+	/**
+	 * GIVEN a class that both directly injects the target AND the target's interface is in config
+	 * WHEN finding dependents
+	 * THEN should show it as a direct dependency (no via annotation)
+	 */
+	public function test_direct_injection_takes_priority_over_via(): void {
+		$consumer = 'Direct_Priority_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\DB_Cache', 'cache' );
+
+		// Write wpdi-config.php binding CacheInterface → DB_Cache.
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => fn(\$r) => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\DB_Cache' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer, $output );
+		$this->assertStringNotContainsString( 'via', $output );
 	}
 
 	/**

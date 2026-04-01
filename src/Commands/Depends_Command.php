@@ -53,7 +53,11 @@ class Depends_Command {
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 
 		// Resolve short class/interface names via autodiscovery paths.
-		if ( ! class_exists( $class_name ) && ! interface_exists( $class_name ) ) {
+		// Only treat as a short name when there is no namespace separator — a FQCN
+		// is used as-is so that unloaded interfaces are handled correctly by
+		// find_dependents() via reflection rather than short-name matching.
+		$is_fqcn = false !== strpos( $class_name, '\\' );
+		if ( ! $is_fqcn && ! class_exists( $class_name ) && ! interface_exists( $class_name ) ) {
 			$class_name = $this->resolve_short_name( $class_name, $path, $autowiring_paths );
 		}
 
@@ -76,14 +80,18 @@ class Depends_Command {
 	/**
 	 * Find all concrete classes in autowiring paths that depend on the target class
 	 *
+	 * Also finds classes that inject an interface the target implements when that
+	 * interface is bound in wpdi-config.php (i.e. the target is the runtime implementation).
+	 *
 	 * @param string $target_fqcn     Fully-qualified target class/interface name.
 	 * @param string $path            Module base path.
 	 * @param array  $autowiring_paths Autowiring paths.
-	 * @return array List of dependent entries: {fqcn, param, type}.
+	 * @return array List of dependent entries: {fqcn, param, type, via}.
 	 */
 	private function find_dependents( string $target_fqcn, string $path, array $autowiring_paths ): array {
-		$discovery  = new Auto_Discovery();
-		$dependents = array();
+		$via_interfaces = $this->get_config_bound_interfaces( $target_fqcn, $path );
+		$discovery      = new Auto_Discovery();
+		$dependents     = array();
 
 		foreach ( $autowiring_paths as $autowiring_path ) {
 			$full_path = $path . '/' . $autowiring_path;
@@ -93,22 +101,74 @@ class Depends_Command {
 			}
 
 			foreach ( $discovery->discover( $full_path ) as $fqcn => $metadata ) {
-				$param_map = $this->get_constructor_param_map( $fqcn );
+				$param_map    = $this->get_constructor_param_map( $fqcn );
+				$direct_match = null;
+				$via_match    = null;
 
 				foreach ( $param_map as $param_name => $dep_fqcn ) {
 					if ( $dep_fqcn === $target_fqcn ) {
-						$dependents[] = array(
+						$direct_match = array(
 							'fqcn'  => $fqcn,
 							'param' => $param_name,
 							'type'  => $this->inspector->get_type( $fqcn ),
+							'via'   => null,
 						);
-						break;
+						break; // Direct match wins — no need to look further.
 					}
+
+					if ( null === $via_match && in_array( $dep_fqcn, $via_interfaces, true ) ) {
+						$via_match = array(
+							'fqcn'  => $fqcn,
+							'param' => $param_name,
+							'type'  => $this->inspector->get_type( $fqcn ),
+							'via'   => $dep_fqcn,
+						);
+						// Keep iterating: a direct match later in the param list takes priority.
+					}
+				}
+
+				if ( null !== $direct_match ) {
+					$dependents[] = $direct_match;
+				} elseif ( null !== $via_match ) {
+					$dependents[] = $via_match;
 				}
 			}
 		}
 
 		return $dependents;
+	}
+
+	/**
+	 * Get interfaces implemented by the target that are also bound in wpdi-config.php
+	 *
+	 * Used to surface classes that depend on the target indirectly via a config-bound interface.
+	 *
+	 * @param string $target_fqcn Target class FQCN.
+	 * @param string $path        Module base path.
+	 * @return array Interface FQCNs.
+	 */
+	private function get_config_bound_interfaces( string $target_fqcn, string $path ): array {
+		$reflection = $this->inspector->get_reflection( $target_fqcn );
+
+		if ( ! $reflection || ! $reflection->isInstantiable() ) {
+			return array();
+		}
+
+		$implemented = $reflection->getInterfaceNames();
+
+		if ( empty( $implemented ) ) {
+			return array();
+		}
+
+		$config_file = $path . '/wpdi-config.php';
+
+		if ( ! file_exists( $config_file ) ) {
+			return array();
+		}
+
+		$config = require $config_file;
+
+		return array_values( array_intersect( $implemented, array_keys( $config ) ) );
 	}
 
 	/**
@@ -148,6 +208,12 @@ class Depends_Command {
 			$pad_type  = $max_type - strlen( $type_label ) + 4;
 			$pad_param = $max_param - strlen( $entry['param'] ) + 4;
 
+			$via_suffix = '';
+			if ( ! empty( $entry['via'] ) ) {
+				$via_short  = $this->get_short_class_name( $entry['via'] );
+				$via_suffix = '    ' . WP_CLI::colorize( "via %c{$via_short}%n" );
+			}
+
 			WP_CLI::log(
 				WP_CLI::colorize( "%W{$short_name}%n" )
 				. str_repeat( ' ', $pad_name )
@@ -156,6 +222,7 @@ class Depends_Command {
 				. WP_CLI::colorize( '%y' . $entry['param'] . '%n' )
 				. str_repeat( ' ', $pad_param )
 				. $this->get_namespace( $entry['fqcn'] )
+				. $via_suffix
 			);
 		}
 	}
