@@ -226,7 +226,7 @@ class ListCommandTest extends TestCase {
 
 		// Only concrete class should be listed (Auto_Discovery filters out interfaces/abstracts)
 		$this->assertStringContainsString( 'Concrete_Service', $output, 'Should contain concrete class' );
-		$this->assertStringContainsString( 'concrete', $output, 'Class type should be concrete' );
+		$this->assertStringContainsString( 'class', $output, 'Class type should be class' );
 		$this->assertStringContainsString( 'yes', $output, 'Concrete class should be autowirable' );
 		$this->assertStringNotContainsString( 'Service_Interface', $output, 'Should not list interfaces' );
 		$this->assertStringNotContainsString( 'Abstract_Service', $output, 'Should not list abstract classes' );

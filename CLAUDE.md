@@ -30,7 +30,7 @@ src/
   Compiler.php           # Generates cache/wpdi-container.php (metadata array)
   Cache_Manager.php      # Incremental cache staleness detection and updates
   version-check.php      # Multi-plugin version conflict detection
-  Commands/              # WP-CLI: compile, list, inspect (ins), clear, depends (dep) + Cli::register_commands() entry point
+  Commands/              # WP-CLI commands: Command.php (abstract base), Cli.php (register_commands entry point), compile, list, inspect, clear, depends
   Exceptions/            # WPDI_Exception > Container_Exception > Not_Found / Circular_Dependency
 tests/
   bootstrap.php          # Mocks WordPress functions (wp_mkdir_p, esc_html, etc.)
@@ -85,6 +85,17 @@ adr/                     # Architectural Decision Records
 - Only cache metadata (`path`, `mtime`, `dependencies`) — never closures
 - Update both `Compiler` and `Container::initialize()` together
 - Ensure `var_export()` output is valid PHP 7.4+
+
+**WP-CLI command changes:**
+- All commands extend `Command` (abstract base class in `src/Commands/Command.php`); commands only collect data and call parent rendering methods
+- Output uses `$this->table($items, $fields, $types, $title, $separators)` — column widths use `mb_strlen()` for multi-byte safety; `$types` maps field names to string format identifiers (`'class_name'`, `'class_fqcn'`, `'type_label'`, `'via'`, `'bool'`, `'param'`); `$title` adds a full-width spanning row above column headers; `$separators` is an array of row indices before which a mid-border line is emitted
+- Type values stored in table rows must be pre-normalized labels (`'class'` not `'concrete'`) via `$this->format_type_label()` before passing to `table()`
+- Adding a new format identifier requires editing `apply_cell_format()` in `Command.php`
+- `render_tree()` in `Command` reshapes tree rows into a table; depth-1 nodes strip their tree connector and are preceded by a mid-border separator; depth-2+ nodes collapse the depth-1 continuation to 1 space (giving 2-space left margin total)
+- Use `$this->tree_connector($is_last)` and `$this->tree_indent($is_last)` when building tree prefixes — these return ASCII or Unicode chars depending on `$this->ascii`
+- Call `$this->parse_format_flag($assoc_args)` at the start of every `__invoke()` that uses `table()` or `render_tree()`; add `[--format=<format>]` to the command's `@synopsis`
+- Use `$this->log_class_header($class, $type, $path)` for the consistent `Path:` + colored-class preamble shown by `inspect` and `depends`
+- See [ADR-012](adr/012-cli-command-output-centralization.md) for the full design rationale
 
 **New exceptions:**
 - Extend `Container_Exception` (container-related) or `WPDI_Exception` (library-specific)

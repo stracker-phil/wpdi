@@ -7,18 +7,12 @@ namespace WPDI\Commands;
 
 use WP_CLI;
 use WPDI\Auto_Discovery;
-use WPDI\Class_Inspector;
 use ReflectionNamedType;
 
 /**
  * Inspect how a class is resolved by WPDI
  */
-class Inspect_Command {
-	private Class_Inspector $inspector;
-
-	public function __construct() {
-		$this->inspector = new Class_Inspector();
-	}
+class Inspect_Command extends Command {
 
 	/**
 	 * Inspect a class and display its dependency tree
@@ -27,7 +21,7 @@ class Inspect_Command {
 	 * Short names are resolved by scanning the autodiscovery paths.
 	 *
 	 * @subcommand inspect
-	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
+	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>] [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -43,6 +37,9 @@ class Inspect_Command {
 	 * [--depth=<depth>]
 	 * : Maximum tree depth to display (default: unlimited)
 	 *
+	 * [--format=<format>]
+	 * : Output format: ascii uses +/- borders instead of box-drawing characters
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp di inspect CensusRunner
@@ -54,6 +51,7 @@ class Inspect_Command {
 		$path             = $assoc_args['dir'] ?? getcwd();
 		$max_depth        = isset( $assoc_args['depth'] ) ? (int) $assoc_args['depth'] : 0;
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
+		$this->parse_format_flag( $assoc_args );
 
 		// Resolve short class names via autodiscovery.
 		if ( ! class_exists( $class_name ) && ! interface_exists( $class_name ) ) {
@@ -63,62 +61,26 @@ class Inspect_Command {
 		$type        = $this->inspector->get_type( $class_name );
 		$config_info = $this->get_config_binding( $class_name, $path );
 
-		// Path header.
-		$file_path = $this->get_class_file_path( $class_name, $path );
-		WP_CLI::log( WP_CLI::colorize( "Path: %W{$file_path}%n" ) );
-		WP_CLI::log( '' );
+		$this->log_class_header( $class_name, $type, $path );
 
 		// Warnings.
 		if ( 'interface' === $type && ! $config_info ) {
-			WP_CLI::warning( 'Interface has no binding in wpdi-config.php - not resolvable' );
+			$this->warning( 'Interface has no binding in wpdi-config.php - not resolvable' );
 		}
 
 		if ( 'abstract' === $type ) {
-			WP_CLI::warning( 'Abstract class is not instantiable' );
+			$this->warning( 'Abstract class is not instantiable' );
 		}
 
 		// Build and display tree.
 		$rows = array();
 		$this->collect_tree_rows( $class_name, 0, array(), $rows, '', 0, $max_depth );
-		$lines = $this->format_tree_rows( $rows );
-
-		foreach ( $lines as $line ) {
-			WP_CLI::log( $line );
-		}
+		// Skip the root row — the class identity is already shown by log_class_header.
+		$this->render_tree( array_slice( $rows, 1 ) );
 
 		if ( count( $rows ) <= 1 ) {
-			WP_CLI::log( WP_CLI::colorize( '%y-- no dependencies --%n' ) );
+			$this->log( WP_CLI::colorize( '%y-- no dependencies --%n' ) );
 		}
-	}
-
-	/**
-	 * Get the file path for a class using reflection
-	 *
-	 * @param string $class_name Fully-qualified class name.
-	 * @param string $base_path  Base path for relative display.
-	 * @return string File path (relative if possible).
-	 */
-	private function get_class_file_path( string $class_name, string $base_path ): string {
-		$reflection = $this->inspector->get_reflection( $class_name );
-
-		if ( ! $reflection ) {
-			return '(unknown)';
-		}
-
-		$file = $reflection->getFileName();
-
-		if ( ! $file ) {
-			return '(internal)';
-		}
-
-		$relative = $this->make_relative( $file, $base_path );
-
-		// Strip ABSPATH prefix when the file is outside the module directory.
-		if ( defined( 'ABSPATH' ) && 0 === strpos( $relative, ABSPATH ) ) {
-			$relative = substr( $relative, strlen( ABSPATH ) );
-		}
-
-		return $relative;
 	}
 
 	/**
@@ -203,7 +165,7 @@ class Inspect_Command {
 				'prefix_width' => 0,
 				'label'        => $this->get_short_class_name( $class_name ),
 				'type'         => $type_label,
-				'fqcn'         => $this->get_namespace( $class_name ),
+				'fqcn'         => $this->get_namespace( $class_name ) ?: $class_name,
 			);
 		}
 
@@ -223,9 +185,8 @@ class Inspect_Command {
 
 		foreach ( $param_map as $param_name => $dep_fqcn ) {
 			$is_last    = ( $index === $count - 1 );
-			$connector  =
-				$is_last ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 " : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
-			$next_pad   = $is_last ? '    ' : "\xE2\x94\x82   ";
+			$connector  = $this->tree_connector( $is_last );
+			$next_pad   = $this->tree_indent( $is_last );
 			$row_prefix = $child_prefix . $connector;
 			$row_width  = $prefix_width + 4;
 			$dep_type   = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
@@ -263,153 +224,6 @@ class Inspect_Command {
 	}
 
 	/**
-	 * Format collected tree rows into column-aligned output lines
-	 *
-	 * @param array $rows Collected tree rows.
-	 * @return array Formatted output lines.
-	 */
-	private function format_tree_rows( array $rows ): array {
-		if ( empty( $rows ) ) {
-			return array();
-		}
-
-		$max_col1 = 0;
-		$max_col2 = 0;
-
-		foreach ( $rows as $row ) {
-			$col1_width = $row['prefix_width'] + strlen( $row['label'] );
-
-			if ( $col1_width > $max_col1 ) {
-				$max_col1 = $col1_width;
-			}
-
-			$col2_width = strlen( $row['type'] );
-
-			if ( $col2_width > $max_col2 ) {
-				$max_col2 = $col2_width;
-			}
-		}
-
-		$lines = array();
-
-		foreach ( $rows as $row ) {
-			$col1_width = $row['prefix_width'] + strlen( $row['label'] );
-			$pad1       = $max_col1 - $col1_width + 4;
-			$pad2       = $max_col2 - strlen( $row['type'] ) + 4;
-
-			$label_color = $this->get_label_color( $row );
-			$type_color  = $this->get_type_color( $row['type'] );
-			$fqcn_str    = $this->colorize_fqcn( $row['fqcn'] );
-
-			$line = $row['prefix']
-				. WP_CLI::colorize( $label_color . $row['label'] . '%n' )
-				. str_repeat( ' ', $pad1 )
-				. WP_CLI::colorize( $type_color . $row['type'] . '%n' )
-				. str_repeat( ' ', $pad2 )
-				. $fqcn_str;
-
-			$lines[] = $line;
-		}
-
-		return $lines;
-	}
-
-	/**
-	 * Format a type string for display
-	 *
-	 * @param string $type Raw type from Class_Inspector.
-	 * @return string Display label.
-	 */
-	private function format_type_label( string $type ): string {
-		if ( 'concrete' === $type ) {
-			return 'class';
-		}
-
-		return $type;
-	}
-
-	/**
-	 * Get the color token for a tree row label
-	 *
-	 * @param array $row Tree row data.
-	 * @return string WP_CLI color token.
-	 */
-	private function get_label_color( array $row ): string {
-		// Root row (class name) gets bright white.
-		if ( '' === $row['prefix'] ) {
-			return '%W';
-		}
-
-		// Parameter names get yellow.
-		return '%y';
-	}
-
-	/**
-	 * Get the color token for a type label
-	 *
-	 * @param string $type Type label (class, interface, abstract, unknown).
-	 * @return string WP_CLI color token.
-	 */
-	private function get_type_color( string $type ): string {
-		switch ( $type ) {
-			case 'class':
-				return '%g';
-			case 'interface':
-				return '%c';
-			case 'abstract':
-				return '%p';
-			default:
-				return '%y';
-		}
-	}
-
-	/**
-	 * Colorize an FQCN string, highlighting [CIRCULAR] markers in red
-	 *
-	 * @param string $fqcn FQCN string, possibly with [CIRCULAR] suffix.
-	 * @return string Colorized string.
-	 */
-	private function colorize_fqcn( string $fqcn ): string {
-		if ( false !== strpos( $fqcn, '[CIRCULAR]' ) ) {
-			$fqcn = str_replace( '[CIRCULAR]', WP_CLI::colorize( '%r[CIRCULAR]%n' ), $fqcn );
-		}
-
-		return $fqcn;
-	}
-
-	/**
-	 * Get the short (unqualified) class name from a FQCN
-	 *
-	 * @param string $fqcn Fully-qualified class name.
-	 * @return string Short class name.
-	 */
-	private function get_short_class_name( string $fqcn ): string {
-		$pos = strrpos( $fqcn, '\\' );
-
-		if ( false === $pos ) {
-			return $fqcn;
-		}
-
-		return substr( $fqcn, $pos + 1 );
-	}
-
-	/**
-	 * Get the namespace portion of a FQCN
-	 *
-	 * @param string $fqcn Fully-qualified class name.
-	 * @return string Namespace (empty string for global namespace).
-	 */
-	private function get_namespace( string $fqcn ): string {
-		$pos = strrpos( $fqcn, '\\' );
-
-		if ( false === $pos ) {
-			return $fqcn;
-		}
-
-		return substr( $fqcn, 0, $pos );
-	}
-
-	/**
 	 * Resolve a short (unqualified) class name to its FQCN via autodiscovery
 	 *
 	 * Scans autodiscovery paths for classes whose short name matches the input.
@@ -439,52 +253,20 @@ class Inspect_Command {
 		}
 
 		if ( empty( $matches ) ) {
-			WP_CLI::error( "Class or interface not found: {$short_name}" );
+			$this->error( "Class or interface not found: {$short_name}" );
 		}
 
 		if ( count( $matches ) > 1 ) {
-			WP_CLI::log( "Ambiguous class name '{$short_name}'. Did you mean:" );
+			$this->log( "Ambiguous class name '{$short_name}'. Did you mean:" );
 
 			foreach ( $matches as $match ) {
-				WP_CLI::log( "  - {$match}" );
+				$this->log( "  - {$match}" );
 			}
 
-			WP_CLI::error( 'Please use a fully-qualified class name.' );
+			$this->error( 'Please use a fully-qualified class name.' );
 		}
 
 		return $matches[0];
 	}
 
-	/**
-	 * Parse autowiring paths from command arguments
-	 *
-	 * @param array $assoc_args Associative arguments from WP-CLI.
-	 * @return array Autowiring paths.
-	 */
-	private function parse_autowiring_paths( array $assoc_args ): array {
-		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
-			return array( 'src' );
-		}
-
-		$paths = explode( ',', $assoc_args['autowiring-paths'] );
-
-		return array_map( 'trim', $paths );
-	}
-
-	/**
-	 * Make a file path relative to a base path
-	 *
-	 * @param string $file_path Full file path.
-	 * @param string $base_path Base path to make relative to.
-	 * @return string Relative path.
-	 */
-	private function make_relative( string $file_path, string $base_path ): string {
-		$base_path = rtrim( $base_path, '/' ) . '/';
-
-		if ( 0 === strpos( $file_path, $base_path ) ) {
-			return substr( $file_path, strlen( $base_path ) );
-		}
-
-		return $file_path;
-	}
 }

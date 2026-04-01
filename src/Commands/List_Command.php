@@ -5,21 +5,14 @@
 
 namespace WPDI\Commands;
 
-use WP_CLI;
 use WPDI\Auto_Discovery;
-use WPDI\Class_Inspector;
 
 use function WP_CLI\Utils\format_items;
 
 /**
  * List services without compiling
  */
-class List_Command {
-	private Class_Inspector $inspector;
-
-	public function __construct() {
-		$this->inspector = new Class_Inspector();
-	}
+class List_Command extends Command {
 
 	/**
 	 * List all injectable services
@@ -39,7 +32,7 @@ class List_Command {
 	 * : Only show services whose fully-qualified class name contains this substring
 	 *
 	 * [--format=<format>]
-	 * : Output format (table, json, yaml, csv) (default: table)
+	 * : Output format: table (default), ascii, json, yaml, csv
 	 *
 	 * ## EXAMPLES
 	 *
@@ -52,9 +45,10 @@ class List_Command {
 		$path             = $assoc_args['dir'] ?? getcwd();
 		$format           = $assoc_args['format'] ?? 'table';
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
+		$this->parse_format_flag( $assoc_args );
 
 		if ( ! is_dir( $path ) ) {
-			WP_CLI::error( "Directory does not exist: {$path}" );
+			$this->error( "Directory does not exist: {$path}" );
 		}
 
 		$output = array();
@@ -77,7 +71,7 @@ class List_Command {
 		foreach ( $classes as $class => $metadata ) {
 			$output[] = array(
 				'class'       => $class,
-				'type'        => $this->inspector->get_type( $class ),
+				'type'        => $this->format_type_label( $this->inspector->get_type( $class ) ),
 				'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
 				'source'      => 'src',
 			);
@@ -90,7 +84,7 @@ class List_Command {
 			foreach ( array_keys( $config ) as $class ) {
 				$output[] = array(
 					'class'       => $class,
-					'type'        => $this->inspector->get_type( $class ),
+					'type'        => $this->format_type_label( $this->inspector->get_type( $class ) ),
 					'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
 					'source'      => 'config',
 				);
@@ -102,137 +96,29 @@ class List_Command {
 			$filter = $assoc_args['filter'];
 			$output = array_filter(
 				$output,
-				function ( array $item ) use ( $filter ): bool {
-					return false !== strpos( $item['class'], $filter );
-				}
+				static fn( array $item ): bool => false !== strpos( $item['class'], $filter )
 			);
 			$output = array_values( $output );
 		}
 
 		if ( empty( $output ) ) {
-			WP_CLI::log( "No services found in {$path}" );
+			$this->log( "No services found in {$path}" );
 
 			return;
 		}
 
-		if ( 'table' === $format ) {
-			$this->display_colored_table( $output );
-		} else {
+		if ( in_array( $format, array( 'json', 'yaml', 'csv' ), true ) ) {
 			format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+		} else {
+			$this->table(
+				$output,
+				array( 'class', 'type', 'autowirable', 'source' ),
+				array(
+					'class'       => 'class_name',
+					'type'        => 'type_label',
+					'autowirable' => 'bool',
+				)
+			);
 		}
-	}
-
-	/**
-	 * Display a colorized table for terminal output
-	 *
-	 * @param array $items Service list items.
-	 */
-	private function display_colored_table( array $items ): void {
-		$fields = array( 'class', 'type', 'autowirable', 'source' );
-
-		// Calculate column widths from raw (uncolored) values.
-		$widths = array();
-		foreach ( $fields as $field ) {
-			$widths[ $field ] = strlen( $field );
-		}
-		foreach ( $items as $item ) {
-			foreach ( $fields as $field ) {
-				$len = strlen( $item[ $field ] );
-				if ( $len > $widths[ $field ] ) {
-					$widths[ $field ] = $len;
-				}
-			}
-		}
-
-		// Build border lines using box-drawing characters.
-		$h_bars = array();
-		foreach ( $fields as $field ) {
-			$h_bars[ $field ] = str_repeat( "\xE2\x94\x80", $widths[ $field ] + 2 );
-		}
-
-		$top_border = "\xE2\x94\x8C" . implode( "\xE2\x94\xAC", $h_bars ) . "\xE2\x94\x90";
-		$mid_border = "\xE2\x94\x9C" . implode( "\xE2\x94\xBC", $h_bars ) . "\xE2\x94\xA4";
-		$bot_border = "\xE2\x94\x94" . implode( "\xE2\x94\xB4", $h_bars ) . "\xE2\x94\x98";
-
-		$header_parts = array();
-		foreach ( $fields as $field ) {
-			$header_parts[] = ' ' . str_pad( $field, $widths[ $field ] ) . ' ';
-		}
-		$header = "\xE2\x94\x82" . implode( "\xE2\x94\x82", $header_parts ) . "\xE2\x94\x82";
-
-		WP_CLI::log( $top_border );
-		WP_CLI::log( $header );
-		WP_CLI::log( $mid_border );
-
-		// Build rows with color.
-		foreach ( $items as $item ) {
-			$cells = array();
-			foreach ( $fields as $field ) {
-				$raw = $item[ $field ];
-				$pad = $widths[ $field ];
-
-				$colored = $this->colorize_cell( $field, $raw, $item );
-				// Pad based on raw length, then insert colored value.
-				$cells[] = ' ' . $colored . str_repeat( ' ', $pad - strlen( $raw ) ) . ' ';
-			}
-			WP_CLI::log( "\xE2\x94\x82" . implode( "\xE2\x94\x82", $cells ) . "\xE2\x94\x82" );
-		}
-
-		WP_CLI::log( $bot_border );
-	}
-
-	/**
-	 * Colorize a single table cell value
-	 *
-	 * @param string $field Column name.
-	 * @param string $value Cell value.
-	 * @return string Colorized value.
-	 */
-	private function colorize_cell( string $field, string $value, array $item ): string {
-		if ( 'class' === $field ) {
-			$short = $this->get_short_class_name( $value );
-			$ns    = substr( $value, 0, strlen( $value ) - strlen( $short ) );
-			$color = 'interface' === $item['type'] ? '%c' : '%G';
-
-			return $ns . WP_CLI::colorize( $color . $short . '%n' );
-		}
-
-		if ( 'autowirable' === $field && 'no' === $value ) {
-			return WP_CLI::colorize( '%r' . $value . '%n' );
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Get the short (unqualified) class name from a FQCN
-	 *
-	 * @param string $fqcn Fully-qualified class name.
-	 * @return string Short class name.
-	 */
-	private function get_short_class_name( string $fqcn ): string {
-		$pos = strrpos( $fqcn, '\\' );
-
-		if ( false === $pos ) {
-			return $fqcn;
-		}
-
-		return substr( $fqcn, $pos + 1 );
-	}
-
-	/**
-	 * Parse autowiring paths from command arguments
-	 *
-	 * @param array $assoc_args Associative arguments from WP-CLI.
-	 * @return array Autowiring paths.
-	 */
-	private function parse_autowiring_paths( array $assoc_args ): array {
-		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
-			return array( 'src' ); // Default
-		}
-
-		$paths = explode( ',', $assoc_args['autowiring-paths'] );
-
-		return array_map( 'trim', $paths );
 	}
 }

@@ -1,6 +1,6 @@
 # ADR-011: Config-Aware Resolution in `wp di depends`
 
-**Status:** Accepted
+**Status:** Amended (config mapping display extended — see bottom)
 
 ## Context
 
@@ -50,6 +50,8 @@ consuming class. Only one entry per consumer class is emitted.
 The command cannot determine what a factory resolves to at runtime. It only uses the *key
 presence* in the config as signal that an interface is intentionally wired.
 
+*(This constraint was partially lifted — see Amendment below.)*
+
 ```
 Dependents of Randomizer (My\Plugin\Services):
 
@@ -70,3 +72,23 @@ SomeService     class    $rand          My\Plugin\Services       via RandomizerI
   still correctly identifies the interface key
 - Contextual bindings (`array`-valued entries in the config) are included in the key scan, so a
   contextual interface also triggers via-lookup; which branch actually runs is not shown
+
+## Amendment: Config Mapping Column
+
+The original decision stated factory values are opaque. This was subsequently relaxed:
+`build_config_mapping_label()` now resolves bindings and shows `as ConcreteClass` in the
+`config mapping` column of the dependents table. The lookup priority is:
+
+1. Indirect match (`via` set) → `via InterfaceName`
+2. `$config[DependentClass]['$param']` → `as ConcreteClass` (per-dependent contextual)
+3. `$config[TargetInterface]['$param']` → `as ConcreteClass` (interface-keyed param array)
+4. `$config[TargetInterface]` as a non-array value → `as ConcreteClass` (simple global binding)
+5. No binding found → `-`
+
+Both string class names (`SomeClass::class`) and **typed closures** (`fn(): SomeClass => ...`)
+are resolved. For typed closures, `ReflectionFunction::getReturnType()` is used to extract the
+declared return type at definition time. Untyped closures and non-closure callables fall through
+to `-`.
+
+This means `wp di depends RandomizerInterface` correctly shows `as Randomizer` for all
+consumers when the config has `RandomizerInterface::class => ['$randomizer' => fn():Randomizer => ...]`.

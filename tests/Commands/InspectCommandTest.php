@@ -120,7 +120,6 @@ class InspectCommandTest extends TestCase {
 
 		$this->assertStringContainsString( '$dependency', $output );
 		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures\\SimpleClass', $output );
-		$this->assertStringContainsString( "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80", $output );
 	}
 
 	/**
@@ -300,7 +299,7 @@ class InspectCommandTest extends TestCase {
 
 		$this->assertStringContainsString( '$first', $output );
 		$this->assertStringContainsString( '$second', $output );
-		$this->assertStringContainsString( "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80", $output );
+		// Depth-2 children still use └── connectors.
 		$this->assertStringContainsString( "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80", $output );
 	}
 

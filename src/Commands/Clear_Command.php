@@ -5,13 +5,12 @@
 
 namespace WPDI\Commands;
 
-use WP_CLI;
 use WPDI\Compiler;
 
 /**
  * Clear compiled WPDI cache files
  */
-class Clear_Command {
+class Clear_Command extends Command {
 	/**
 	 * Clear compiled cache
 	 *
@@ -38,19 +37,19 @@ class Clear_Command {
 
 			// Verify deletion worked
 			if ( ! $compiler->exists() ) {
-				WP_CLI::success( "Cache cleared: {$cache_file}" );
+				$this->success( "Cache cleared: {$cache_file}" );
 			} else {
-				WP_CLI::error( "Failed to delete cache file: {$cache_file}" );
+				$this->error( "Failed to delete cache file: {$cache_file}" );
 			}
 		} else {
-			WP_CLI::log( 'No cache file found at: ' . $compiler->get_cache_file() );
+			$this->log( 'No cache file found at: ' . $compiler->get_cache_file() );
 		}
 
-		// Clear entire cache directory if empty
+		// Clear the entire cache directory, if empty.
 		$cache_dir = dirname( $compiler->get_cache_file() );
 		if ( is_dir( $cache_dir ) && 2 === count( scandir( $cache_dir ) ) ) { // Only . and ..
 			if ( @rmdir( $cache_dir ) ) {
-				WP_CLI::success( 'Removed empty cache directory' );
+				$this->success( 'Removed empty cache directory' );
 			}
 		}
 	}

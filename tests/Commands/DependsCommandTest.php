@@ -345,9 +345,9 @@ class DependsCommandTest extends TestCase {
 	/**
 	 * GIVEN a header is expected
 	 * WHEN finding dependents
-	 * THEN should include the target class short name in the header
+	 * THEN should show the target class short name, namespace, and file path
 	 */
-	public function test_header_shows_target_short_name(): void {
+	public function test_header_shows_target_class_info(): void {
 		$command = new Depends_Command();
 
 		$command->__invoke(
@@ -357,8 +357,9 @@ class DependsCommandTest extends TestCase {
 
 		$output = $this->getLogOutput();
 
-		$this->assertStringContainsString( 'Dependents of SimpleClass', $output );
+		$this->assertStringContainsString( 'SimpleClass', $output );
 		$this->assertStringContainsString( 'WPDI\\Tests\\Fixtures', $output );
+		$this->assertStringContainsString( 'Path:', $output );
 	}
 
 	/**
@@ -435,6 +436,82 @@ class DependsCommandTest extends TestCase {
 
 		$this->assertStringContainsString( $consumer, $output );
 		$this->assertStringNotContainsString( 'via', $output );
+	}
+
+	/**
+	 * GIVEN an interface bound in config to a concrete class via a string binding
+	 * WHEN finding dependents of that interface
+	 * THEN config mapping should show "as ConcreteClass"
+	 */
+	public function test_shows_as_label_for_simple_string_binding(): void {
+		$consumer = 'As_Label_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		// Simple string binding: CacheInterface => DB_Cache.
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => \\WPDI\\Tests\\Fixtures\\DB_Cache::class ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\CacheInterface' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer, $output );
+		$this->assertStringContainsString( '$cache', $output );
+		$this->assertStringContainsString( 'as DB_Cache', $output );
+	}
+
+	/**
+	 * GIVEN an interface bound in config via a typed closure on the interface key
+	 * WHEN finding dependents of that interface
+	 * THEN config mapping should show "as ConcreteClass" from the closure's return type
+	 */
+	public function test_shows_as_label_for_interface_keyed_closure_binding(): void {
+		$consumer = 'Closure_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		// Interface-keyed param binding with typed closure: CacheInterface['$cache'] => fn():DB_Cache.
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => [ '\$cache' => static fn(): \\WPDI\\Tests\\Fixtures\\DB_Cache => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ] ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\CacheInterface' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer, $output );
+		$this->assertStringContainsString( 'as DB_Cache', $output );
+	}
+
+	/**
+	 * GIVEN an interface bound via a contextual binding keyed by dependent class
+	 * WHEN finding dependents of that interface
+	 * THEN config mapping should show "as ConcreteClass" from the contextual binding
+	 */
+	public function test_shows_as_label_for_dependent_class_contextual_binding(): void {
+		$consumer = 'Contextual_Consumer_' . uniqid();
+		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		// Contextual binding keyed by dependent class: Consumer['$cache'] => DB_Cache.
+		$config = "<?php\nreturn [ '{$consumer}' => [ '\$cache' => \\WPDI\\Tests\\Fixtures\\DB_Cache::class ] ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\CacheInterface' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		$this->assertStringContainsString( $consumer, $output );
+		$this->assertStringContainsString( 'as DB_Cache', $output );
 	}
 
 	/**

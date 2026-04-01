@@ -5,19 +5,18 @@
 
 namespace WPDI\Commands;
 
-use WP_CLI;
 use WPDI\Auto_Discovery;
 use WPDI\Compiler;
 
 /**
  * Compile WPDI container for production performance
  */
-class Compile_Command {
+class Compile_Command extends Command {
 	/**
 	 * Compile WPDI container cache
 	 *
 	 * @subcommand compile
-	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--force]
+	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--force] [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -30,6 +29,9 @@ class Compile_Command {
 	 * [--force]
 	 * : Force recompilation even if cache exists
 	 *
+	 * [--format=<format>]
+	 * : Output format: ascii uses +/- borders instead of box-drawing characters
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp di compile
@@ -40,96 +42,109 @@ class Compile_Command {
 		$path             = $assoc_args['dir'] ?? getcwd();
 		$force            = isset( $assoc_args['force'] );
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
+		$this->parse_format_flag( $assoc_args );
 
 		if ( ! is_dir( $path ) ) {
-			WP_CLI::error( "Directory does not exist: {$path}" );
+			$this->error( "Directory does not exist: {$path}" );
 		}
 
 		$compiler = new Compiler( $path );
 
 		// Check cache directory is writable before doing any work
 		if ( ! $compiler->ensure_dir() ) {
-			WP_CLI::error( "Cache directory is not writable: {$path}/cache\nEnsure the directory exists and has write permissions." );
+			$this->error( "Cache directory is not writable: {$path}/cache\nEnsure the directory exists and has write permissions." );
 		}
 
 		if ( $compiler->exists() && ! $force ) {
-			WP_CLI::warning( 'Cache file already exists. Use --force to overwrite.' );
+			$this->warning( 'Cache file already exists. Use --force to overwrite.' );
 
 			return;
 		}
 
-		WP_CLI::log( 'Discovering classes in:' );
-		foreach ( $autowiring_paths as $autowiring_path ) {
-			WP_CLI::log( "  - {$path}/{$autowiring_path}" );
-		}
+		$this->log( 'Discovering classes:' );
 
 		$discovery = new Auto_Discovery();
 		$classes   = array();
 
-		// Discover from each autowiring path
+		// Discover from each autowiring path and render a table per source.
 		foreach ( $autowiring_paths as $autowiring_path ) {
 			$full_path = $path . '/' . $autowiring_path;
 
 			if ( ! is_dir( $full_path ) ) {
-				WP_CLI::warning( "Autowiring path does not exist: {$full_path}" );
+				$this->warning( "Autowiring path does not exist: {$full_path}" );
 				continue;
 			}
 
 			$discovered = $discovery->discover( $full_path );
 			$classes    = array_merge( $classes, $discovered );
+
+			$rows = array();
+			foreach ( $discovered as $class => $metadata ) {
+				$rows[] = array(
+					'type'  => $this->format_type_label( $this->inspector->get_type( $class ) ),
+					'class' => $class,
+				);
+			}
+
+			$this->table(
+				$rows,
+				array( 'type', 'class' ),
+				array(
+					'type'  => 'type_label',
+					'class' => 'class_name',
+				),
+				$autowiring_path
+			);
 		}
 
 		if ( empty( $classes ) ) {
-			WP_CLI::warning( 'No classes found to compile.' );
+			$this->warning( 'No classes found to compile.' );
 
 			return;
 		}
 
-		WP_CLI::log( 'Found ' . count( $classes ) . ' classes:' );
-		foreach ( $classes as $class => $metadata ) {
-			WP_CLI::log( "  - {$class}" );
-		}
+		$this->log( 'Found ' . count( $classes ) . ' classes.' );
 
 		// Check for manual configuration
 		$config_file    = $path . '/wpdi-config.php';
 		$manual_configs = array();
 		if ( file_exists( $config_file ) ) {
-			WP_CLI::log( 'Loading configuration from wpdi-config.php...' );
+			$this->log( 'Loading configuration from wpdi-config.php...' );
 			$config         = require $config_file;
 			$manual_configs = array_keys( $config );
+
+			$rows = array();
+			foreach ( $manual_configs as $config_class ) {
+				$rows[] = array(
+					'type'  => $this->format_type_label( $this->inspector->get_type( $config_class ) ),
+					'class' => $config_class,
+				);
+			}
+
+			$this->table(
+				$rows,
+				array( 'type', 'class' ),
+				array(
+					'type'  => 'type_label',
+					'class' => 'class_name',
+				),
+				'wpdi-config.php'
+			);
 		}
 
-		WP_CLI::log( 'Compiling container cache...' );
+		$this->log( 'Compiling container cache...' );
 
 		if ( $compiler->write( $classes ) ) {
-			WP_CLI::success( 'Container compiled successfully to ' . $compiler->get_cache_file() );
+			$this->success( 'Container compiled successfully to ' . $compiler->get_cache_file() );
 
 			// Show statistics
-			WP_CLI::log( 'Total discovered classes: ' . count( $classes ) );
+			$this->log( 'Total discovered classes: ' . count( $classes ) );
 			if ( ! empty( $manual_configs ) ) {
-				WP_CLI::log( 'Manual configurations: ' . count( $manual_configs ) );
-				foreach ( $manual_configs as $config_class ) {
-					WP_CLI::log( "  - {$config_class}" );
-				}
+				$this->log( 'Manual configurations: ' . count( $manual_configs ) );
 			}
 		} else {
-			WP_CLI::error( 'Failed to compile container cache' );
+			$this->error( 'Failed to compile container cache' );
 		}
 	}
 
-	/**
-	 * Parse autowiring paths from command arguments
-	 *
-	 * @param array $assoc_args Associative arguments from WP-CLI.
-	 * @return array Autowiring paths.
-	 */
-	private function parse_autowiring_paths( array $assoc_args ): array {
-		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
-			return array( 'src' ); // Default
-		}
-
-		$paths = explode( ',', $assoc_args['autowiring-paths'] );
-
-		return array_map( 'trim', $paths );
-	}
 }

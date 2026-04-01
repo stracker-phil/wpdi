@@ -5,20 +5,17 @@
 
 namespace WPDI\Commands;
 
+use Closure;
+use ReflectionException;
+use ReflectionFunction;
+use ReflectionNamedType;
 use WP_CLI;
 use WPDI\Auto_Discovery;
-use WPDI\Class_Inspector;
-use ReflectionNamedType;
 
 /**
  * Find all classes that depend on a given class or interface
  */
-class Depends_Command {
-	private Class_Inspector $inspector;
-
-	public function __construct() {
-		$this->inspector = new Class_Inspector();
-	}
+class Depends_Command extends Command {
 
 	/**
 	 * List all classes that depend on a given class or interface
@@ -27,7 +24,7 @@ class Depends_Command {
 	 * Short names are resolved by scanning the autodiscovery paths and their dependencies.
 	 *
 	 * @subcommand depends
-	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>]
+	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -40,6 +37,9 @@ class Depends_Command {
 	 * [--autowiring-paths=<paths>]
 	 * : Comma-separated autowiring paths relative to module (default: src)
 	 *
+	 * [--format=<format>]
+	 * : Output format: ascii uses +/- borders instead of box-drawing characters
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp di depends LoggerInterface
@@ -50,6 +50,7 @@ class Depends_Command {
 		$class_name       = $args[0];
 		$path             = $assoc_args['dir'] ?? getcwd();
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
+		$this->parse_format_flag( $assoc_args );
 
 		// Resolve short class/interface names via autodiscovery paths.
 		// Only treat as a short name when there is no namespace separator — a FQCN
@@ -60,20 +61,38 @@ class Depends_Command {
 			$class_name = $this->resolve_short_name( $class_name, $path, $autowiring_paths );
 		}
 
+		$type = $this->inspector->get_type( $class_name );
+		$this->log_class_header( $class_name, $type, $path );
+
 		$dependents = $this->find_dependents( $class_name, $path, $autowiring_paths );
 
-		$short_name = $this->get_short_class_name( $class_name );
-		$namespace  = $this->get_namespace( $class_name );
-
-		WP_CLI::log( WP_CLI::colorize( "%WDependents of {$short_name}%n" ) . ( $namespace ? WP_CLI::colorize( " %8({$namespace})%n" ) : '' ) . ':' );
-		WP_CLI::log( '' );
-
 		if ( empty( $dependents ) ) {
-			WP_CLI::log( WP_CLI::colorize( '%y-- no dependents found --%n' ) );
+			$this->log( WP_CLI::colorize( '%y-- no dependents found --%n' ) );
+
 			return;
 		}
 
-		$this->display_dependents( $dependents );
+		$config = $this->load_config( $path );
+		$rows   = array();
+		foreach ( $dependents as $entry ) {
+			$rows[] = array(
+				'type'           => $this->format_type_label( $entry['type'] ),
+				'class'          => $entry['fqcn'],
+				'param'          => $entry['param'],
+				'config mapping' => $this->build_config_mapping_label( $class_name, $entry, $config ),
+			);
+		}
+
+		$this->table(
+			$rows,
+			array( 'type', 'class', 'param', 'config mapping' ),
+			array(
+				'type'           => 'type_label',
+				'class'          => 'class_name',
+				'param'          => 'param',
+				'config mapping' => 'via',
+			)
+		);
 	}
 
 	/**
@@ -82,8 +101,8 @@ class Depends_Command {
 	 * Also finds classes that inject an interface the target implements when that
 	 * interface is bound in wpdi-config.php (i.e. the target is the runtime implementation).
 	 *
-	 * @param string $target_fqcn     Fully-qualified target class/interface name.
-	 * @param string $path            Module base path.
+	 * @param string $target_fqcn      Fully-qualified target class/interface name.
+	 * @param string $path             Module base path.
 	 * @param array  $autowiring_paths Autowiring paths.
 	 * @return array List of dependent entries: {fqcn, param, type, via}.
 	 */
@@ -159,71 +178,9 @@ class Depends_Command {
 			return array();
 		}
 
-		$config_file = $path . '/wpdi-config.php';
-
-		if ( ! file_exists( $config_file ) ) {
-			return array();
-		}
-
-		$config = require $config_file;
+		$config = $this->load_config( $path );
 
 		return array_values( array_intersect( $implemented, array_keys( $config ) ) );
-	}
-
-	/**
-	 * Display dependent entries as a formatted, column-aligned list
-	 *
-	 * @param array $dependents List of dependent entries.
-	 */
-	private function display_dependents( array $dependents ): void {
-		$max_name  = 0;
-		$max_type  = 0;
-		$max_param = 0;
-
-		foreach ( $dependents as $entry ) {
-			$name_len = strlen( $this->get_short_class_name( $entry['fqcn'] ) );
-			if ( $name_len > $max_name ) {
-				$max_name = $name_len;
-			}
-
-			$type_label = $this->format_type_label( $entry['type'] );
-			$type_len   = strlen( $type_label );
-			if ( $type_len > $max_type ) {
-				$max_type = $type_len;
-			}
-
-			$param_len = strlen( $entry['param'] );
-			if ( $param_len > $max_param ) {
-				$max_param = $param_len;
-			}
-		}
-
-		foreach ( $dependents as $entry ) {
-			$short_name = $this->get_short_class_name( $entry['fqcn'] );
-			$type_label = $this->format_type_label( $entry['type'] );
-			$type_color = $this->get_type_color( $type_label );
-
-			$pad_name  = $max_name - strlen( $short_name ) + 4;
-			$pad_type  = $max_type - strlen( $type_label ) + 4;
-			$pad_param = $max_param - strlen( $entry['param'] ) + 4;
-
-			$via_suffix = '';
-			if ( ! empty( $entry['via'] ) ) {
-				$via_short  = $this->get_short_class_name( $entry['via'] );
-				$via_suffix = '    ' . WP_CLI::colorize( "via %c{$via_short}%n" );
-			}
-
-			WP_CLI::log(
-				WP_CLI::colorize( "%W{$short_name}%n" )
-				. str_repeat( ' ', $pad_name )
-				. WP_CLI::colorize( $type_color . $type_label . '%n' )
-				. str_repeat( ' ', $pad_type )
-				. WP_CLI::colorize( '%y' . $entry['param'] . '%n' )
-				. str_repeat( ' ', $pad_param )
-				. $this->get_namespace( $entry['fqcn'] )
-				. $via_suffix
-			);
-		}
 	}
 
 	/**
@@ -298,100 +255,109 @@ class Depends_Command {
 		}
 
 		if ( empty( $matches ) ) {
-			WP_CLI::error( "Class or interface not found: {$short_name}" );
+			$this->error( "Class or interface not found: {$short_name}" );
 		}
 
 		if ( count( $matches ) > 1 ) {
-			WP_CLI::log( "Ambiguous name '{$short_name}'. Did you mean:" );
+			$this->log( "Ambiguous name '{$short_name}'. Did you mean:" );
 
 			foreach ( $matches as $match ) {
-				WP_CLI::log( "  - {$match}" );
+				$this->log( "  - {$match}" );
 			}
 
-			WP_CLI::error( 'Please use a fully-qualified class name.' );
+			$this->error( 'Please use a fully-qualified class name.' );
 		}
 
 		return $matches[0];
 	}
 
 	/**
-	 * Parse autowiring paths from command arguments
+	 * Load wpdi-config.php and return its array, or an empty array if absent.
 	 *
-	 * @param array $assoc_args Associative arguments from WP-CLI.
-	 * @return array Autowiring paths.
+	 * @param string $path Module base path.
+	 * @return array Config bindings.
 	 */
-	private function parse_autowiring_paths( array $assoc_args ): array {
-		if ( ! isset( $assoc_args['autowiring-paths'] ) ) {
-			return array( 'src' );
+	private function load_config( string $path ): array {
+		$config_file = $path . '/wpdi-config.php';
+
+		if ( ! file_exists( $config_file ) ) {
+			return array();
 		}
 
-		$paths = explode( ',', $assoc_args['autowiring-paths'] );
+		$config = require $config_file;
 
-		return array_map( 'trim', $paths );
+		return is_array( $config ) ? $config : array();
 	}
 
 	/**
-	 * Get the short (unqualified) class name from a FQCN
+	 * Build the "config mapping" label for a single dependent entry.
 	 *
-	 * @param string $fqcn Fully-qualified class name.
-	 * @return string Short class name.
-	 */
-	private function get_short_class_name( string $fqcn ): string {
-		$pos = strrpos( $fqcn, '\\' );
-
-		if ( false === $pos ) {
-			return $fqcn;
-		}
-
-		return substr( $fqcn, $pos + 1 );
-	}
-
-	/**
-	 * Get the namespace portion of a FQCN
+	 * Binding lookup order (first match wins):
+	 *   1. Indirect match (entry has a 'via' interface)       → "via InterfaceName"
+	 *   2. $config[DependentClass]['$param']                  → "as ConcreteClass"
+	 *   3. $config[TargetInterface]['$param']                 → "as ConcreteClass"
+	 *   4. $config[TargetInterface] (simple non-array value)  → "as ConcreteClass"
+	 *   5. No binding found                                   → "-"
 	 *
-	 * @param string $fqcn Fully-qualified class name.
-	 * @return string Namespace (empty string for global namespace).
-	 */
-	private function get_namespace( string $fqcn ): string {
-		$pos = strrpos( $fqcn, '\\' );
-
-		if ( false === $pos ) {
-			return '';
-		}
-
-		return substr( $fqcn, 0, $pos );
-	}
-
-	/**
-	 * Format a type string for display
+	 * Both string class names and typed closures (fn():Concrete => ...) are resolved.
 	 *
-	 * @param string $type Raw type from Class_Inspector.
+	 * @param string $target_fqcn FQCN of the class/interface being depended on.
+	 * @param array  $entry       Dependent entry: {fqcn, param, type, via}.
+	 * @param array  $config      Loaded wpdi-config.php array.
 	 * @return string Display label.
 	 */
-	private function format_type_label( string $type ): string {
-		if ( 'concrete' === $type ) {
-			return 'class';
+	private function build_config_mapping_label( string $target_fqcn, array $entry, array $config ): string {
+		if ( ! empty( $entry['via'] ) ) {
+			return 'via ' . $this->get_short_class_name( $entry['via'] );
 		}
 
-		return $type;
+		// Contextual binding keyed by dependent class: $config[Dependent]['$param'].
+		$binding = $config[ $entry['fqcn'] ][ $entry['param'] ] ?? null;
+
+		// Contextual binding keyed by target interface: $config[Interface]['$param'].
+		if ( null === $binding && is_array( $config[ $target_fqcn ] ?? null ) ) {
+			$binding = $config[ $target_fqcn ][ $entry['param'] ] ?? null;
+		}
+
+		// Simple global binding: $config[Interface] = ConcreteClass or closure.
+		if ( null === $binding ) {
+			$candidate = $config[ $target_fqcn ] ?? null;
+			if ( ! is_array( $candidate ) ) {
+				$binding = $candidate;
+			}
+		}
+
+		$class = $this->resolve_binding_class( $binding );
+
+		return null !== $class ? 'as ' . $this->get_short_class_name( $class ) : '-';
 	}
 
 	/**
-	 * Get the color token for a type label
+	 * Extract the concrete class name from a binding value.
 	 *
-	 * @param string $type Type label (class, interface, abstract, unknown).
-	 * @return string WP_CLI color token.
+	 * Handles string class names and typed closures (reads the declared return type).
+	 * Returns null when the class cannot be determined (untyped closure, scalar, etc.).
+	 *
+	 * @param mixed $binding Raw binding value from wpdi-config.php.
+	 * @return string|null Resolved FQCN or short class name, or null.
 	 */
-	private function get_type_color( string $type ): string {
-		switch ( $type ) {
-			case 'class':
-				return '%g';
-			case 'interface':
-				return '%c';
-			case 'abstract':
-				return '%p';
-			default:
-				return '%y';
+	private function resolve_binding_class( $binding ): ?string {
+		if ( is_string( $binding ) ) {
+			return $binding;
 		}
+
+		if ( $binding instanceof Closure ) {
+			try {
+				$rt = ( new ReflectionFunction( $binding ) )->getReturnType();
+				if ( $rt instanceof ReflectionNamedType && ! $rt->isBuiltin() ) {
+					return $rt->getName();
+				}
+			} catch ( ReflectionException $e ) {
+				return null;
+			}
+		}
+
+		return null;
 	}
+
 }

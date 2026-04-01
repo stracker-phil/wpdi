@@ -37,6 +37,7 @@ class Cli {
 
 		$registered = true;
 
+		require_once __DIR__ . '/Command.php';
 		require_once __DIR__ . '/Compile_Command.php';
 		require_once __DIR__ . '/List_Command.php';
 		require_once __DIR__ . '/Clear_Command.php';
