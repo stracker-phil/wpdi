@@ -22,6 +22,38 @@ Commands\Cli::register_commands();
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
  */
 abstract class Scope {
+
+	/**
+	 * Stores booted instances keyed by class name to prevent duplicate containers.
+	 *
+	 * @var array<string, static>
+	 */
+	private static $booted = array();
+
+	/**
+	 * Boot the scope — idempotent, safe to call multiple times.
+	 *
+	 * Use this instead of `new` to avoid unused-return-value warnings and
+	 * to prevent accidentally creating multiple containers for the same scope.
+	 *
+	 * @param string $scope_file Path to the implementing file (use __FILE__).
+	 */
+	public static function boot( string $scope_file ): void {
+		if ( isset( self::$booted[ static::class ] ) ) {
+			return;
+		}
+		self::$booted[ static::class ] = new static( $scope_file );
+	}
+
+	/**
+	 * Clear the booted instance for this class.
+	 *
+	 * Intended for use in tests to reset state between test cases.
+	 */
+	public static function clear(): void {
+		unset( self::$booted[ static::class ] );
+	}
+
 	/**
 	 * Define paths for autowiring class discovery
 	 *
@@ -57,7 +89,7 @@ abstract class Scope {
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
-	public function __construct( string $scope_file ) {
+	protected function __construct( string $scope_file ) {
 		$container = new Container();
 		$container->initialize( $scope_file, $this->autowiring_paths(), $this->environment() );
 		$this->bootstrap( $container->resolver() );

@@ -21,4 +21,4 @@ class Test_Plugin extends WPDI\Scope {
 }
 
 // Initialize the plugin
-new Test_Plugin( __FILE__ );
+Test_Plugin::boot( __FILE__ );

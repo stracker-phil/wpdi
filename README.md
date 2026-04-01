@@ -35,7 +35,7 @@ class My_Plugin extends WPDI\Scope {
     }
 }
 
-new My_Plugin( __FILE__ );
+My_Plugin::boot( __FILE__ );
 ```
 
 Your classes in `src/` are auto-discovered and autowired:

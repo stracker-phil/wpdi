@@ -43,7 +43,7 @@ adr/                     # Architectural Decision Records
 
 ## Key Patterns
 
-- **Composition root**: `Scope::bootstrap(Resolver)` is the only place that resolves services. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
+- **Composition root**: `App::boot(__FILE__)` is the entry point — a static method on `Scope` that is idempotent (duplicate calls are no-ops) and returns `void`. The constructor is `protected`; `boot()` is the only external entry point. `bootstrap(Resolver)` is the single place services are resolved. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
 - **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. Contextual bindings use `'$param_name'`-keyed arrays for multiple implementations of the same interface. See [ADR-004](adr/004-zero-config-autowiring.md), [ADR-010](adr/010-contextual-bindings.md).
 - **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
 - **Metadata caching**: Cache stores `{path, mtime, dependencies}` per class, not closures. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
@@ -63,6 +63,12 @@ adr/                     # Architectural Decision Records
 **Any source file:**
 - Verify PHP 7.4 compat — run `ddev composer test`
 - No defensive checks that type hints make impossible (dead code)
+
+**Scope changes:**
+- Constructor is `protected` — use `App::boot(__FILE__)` as the external entry point
+- `boot()` is idempotent: second call for the same class is a no-op (silent return)
+- `clear()` is for test teardown only — call in `tearDown()` via `TestScope::clear()`
+- Test fixtures that need direct instantiation must override the constructor with `public` visibility and call `parent::__construct()`
 
 **Container changes:**
 - Update `ContainerTest.php` with corresponding tests

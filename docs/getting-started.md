@@ -41,7 +41,7 @@ class My_Plugin extends WPDI\Scope {
     }
 }
 
-new My_Plugin( __FILE__ );
+My_Plugin::boot( __FILE__ );
 ```
 
 ### 2. Create Your Application

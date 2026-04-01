@@ -13,6 +13,10 @@ class TestScope extends Scope {
 	public $resolved_service = null;
 	public ?Resolver $resolver = null;
 
+	public function __construct( string $scope_file ) {
+		parent::__construct( $scope_file );
+	}
+
 	protected function bootstrap( Resolver $resolver ): void {
 		$this->bootstrap_called = true;
 		$this->resolver         = $resolver;

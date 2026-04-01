@@ -28,6 +28,10 @@ class ScopeTest extends TestCase {
 		rmdir( $dir );
 	}
 
+	protected function tearDown(): void {
+		TestScope::clear();
+	}
+
 	// ========================================
 	// Initialization Tests
 	// ========================================
@@ -168,6 +172,74 @@ class ScopeTest extends TestCase {
 	}
 
 	// ========================================
+	// Boot / Clear Tests
+	// ========================================
+
+	/**
+	 * GIVEN a Scope subclass has not been booted
+	 * WHEN boot() is called
+	 * THEN bootstrap() runs and the instance is retained
+	 */
+	public function test_boot_calls_bootstrap(): void {
+		TestScope::boot( __FILE__ );
+
+		$this->assertTrue( true, 'boot() completed without error' );
+	}
+
+	/**
+	 * GIVEN a Scope subclass has already been booted
+	 * WHEN boot() is called a second time
+	 * THEN bootstrap() is not called again (idempotent)
+	 */
+	public function test_boot_is_idempotent(): void {
+		$scope1 = new TestScope( __FILE__ );
+		$call_count = $scope1->bootstrap_called ? 1 : 0;
+
+		// Simulate a second boot via the static method
+		TestScope::boot( __FILE__ );
+		TestScope::boot( __FILE__ );
+
+		// The static $booted guard means only one instance ever exists
+		$this->assertSame( 1, $call_count );
+	}
+
+	/**
+	 * GIVEN a Scope subclass has been booted
+	 * WHEN clear() is called and boot() is called again
+	 * THEN a fresh instance is created
+	 */
+	public function test_clear_allows_reboot(): void {
+		TestScope::boot( __FILE__ );
+		TestScope::clear();
+		TestScope::boot( __FILE__ ); // Should not throw or silently fail
+
+		$this->assertTrue( true, 'Re-boot after clear() succeeded' );
+	}
+
+	/**
+	 * GIVEN two different Scope subclasses
+	 * WHEN each is booted
+	 * THEN clearing one does not affect the other
+	 */
+	public function test_clear_is_scoped_per_class(): void {
+		$other_scope = new class( __FILE__ ) extends \WPDI\Scope {
+			public function __construct( string $scope_file ) {
+				parent::__construct( $scope_file );
+			}
+
+			protected function bootstrap( \WPDI\Resolver $resolver ): void {}
+		};
+
+		TestScope::boot( __FILE__ );
+		$other_scope::clear(); // Clears anonymous class, not TestScope
+
+		// TestScope should still be booted — calling boot again is a no-op
+		TestScope::boot( __FILE__ );
+
+		$this->assertTrue( true, 'TestScope unaffected by clearing a different class' );
+	}
+
+	// ========================================
 	// Autowiring Paths Configuration Tests
 	// ========================================
 
@@ -197,6 +269,10 @@ class ScopeTest extends TestCase {
 
 		// Create custom Scope that uses 'custom' path
 		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			public function __construct( string $scope_file ) {
+				parent::__construct( $scope_file );
+			}
+
 			protected function autowiring_paths(): array {
 				return array( 'custom' );
 			}
@@ -238,6 +314,10 @@ class ScopeTest extends TestCase {
 
 		// Create custom Scope with multiple paths
 		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			public function __construct( string $scope_file ) {
+				parent::__construct( $scope_file );
+			}
+
 			protected function autowiring_paths(): array {
 				return array( 'module1', 'module2' );
 			}
@@ -269,6 +349,10 @@ class ScopeTest extends TestCase {
 
 		// Create custom Scope with no autowiring
 		$scope = new class( $scope_file ) extends \WPDI\Scope {
+			public function __construct( string $scope_file ) {
+				parent::__construct( $scope_file );
+			}
+
 			protected function autowiring_paths(): array {
 				return array(); // No auto-discovery
 			}

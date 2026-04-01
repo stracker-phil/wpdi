@@ -99,9 +99,9 @@ Clear all bindings and instances (testing).
 
 Base class for WordPress modules.
 
-### bootstrap(Resolver $resolver): void (abstract)
+### boot(string $scope_file): void (static)
 
-Composition root - implement in your module.
+Entry point — creates the container and calls `bootstrap()`. Idempotent: subsequent calls for the same class are silently ignored, preventing accidental duplicate containers.
 
 ```php
 class My_Plugin extends WPDI\Scope {
@@ -111,8 +111,22 @@ class My_Plugin extends WPDI\Scope {
     }
 }
 
-new My_Plugin( __FILE__ );
+My_Plugin::boot( __FILE__ );
 ```
+
+### clear(): void (static)
+
+Removes the stored instance for this class, allowing a fresh `boot()` call. Intended for test teardown only.
+
+```php
+protected function tearDown(): void {
+    My_Plugin::clear();
+}
+```
+
+### bootstrap(Resolver $resolver): void (abstract)
+
+Composition root - implement in your module. Called automatically by `boot()`.
 
 ---
 
