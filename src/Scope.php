@@ -4,6 +4,8 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
+use WPDI\Commands\Cli;
+
 require_once __DIR__ . '/version-check.php';
 
 require_once __DIR__ . '/Exceptions/Wpdi_Exception.php';
@@ -16,7 +18,17 @@ require_once __DIR__ . '/Compiler.php';
 require_once __DIR__ . '/Cache_Manager.php';
 require_once __DIR__ . '/Resolver.php';
 require_once __DIR__ . '/Container.php';
-Commands\Cli::register_commands();
+
+/*
+ * Ensure the CLI is wired up and working as soon as this class is loaded.
+ *
+ * When the class is loaded conditionally, e.g. in a hook that does not fire
+ * early enough for CLI setup, then this function can be safely called in your
+ * app at the earliest possible time to ensure the presence of CLI commands:
+ *
+ * \WPDI\Commands\Cli::register_commands();
+ */
+Cli::register_commands();
 
 /**
  * Base class for WordPress modules using WPDI (plugins, themes, etc.)
@@ -28,27 +40,27 @@ abstract class Scope {
 	 *
 	 * @var array<string, static>
 	 */
-	private static $booted = array();
+	private static array $booted = array();
 
 	/**
 	 * Boot the scope — idempotent, safe to call multiple times.
 	 *
-	 * Use this instead of `new` to avoid unused-return-value warnings and
-	 * to prevent accidentally creating multiple containers for the same scope.
+	 * The first time it's called, the `::bootstrap()` method is invoked
+	 * and receives the DI Resolver. This is the only time the Resolver is
+	 * available in the app lifecycle.
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
 	public static function boot( string $scope_file ): void {
-		if ( isset( self::$booted[ static::class ] ) ) {
-			return;
+		if ( ! isset( self::$booted[ static::class ] ) ) {
+			self::$booted[ static::class ] = new static( $scope_file );
 		}
-		self::$booted[ static::class ] = new static( $scope_file );
 	}
 
 	/**
 	 * Clear the booted instance for this class.
 	 *
-	 * Intended for use in tests to reset state between test cases.
+	 * Intended for use in tests to reset the state between test cases.
 	 */
 	public static function clear(): void {
 		unset( self::$booted[ static::class ] );
@@ -90,8 +102,20 @@ abstract class Scope {
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
 	protected function __construct( string $scope_file ) {
+		/*
+		 * The DI container is intentionally a throw-away instance (not stored in a property).
+		 *
+		 * Principle: Composition Root — the container wires the object graph, then is discarded.
+		 * Attention: A Resolver (narrow service locator) is passed to bootstrap only. Injecting
+		 * the Resolver into domain services defeats this and should be avoided.
+		 */
 		$container = new Container();
-		$container->initialize( $scope_file, $this->autowiring_paths(), $this->environment() );
+		$container->initialize(
+			$scope_file,
+			$this->autowiring_paths(),
+			$this->environment()
+		);
+
 		$this->bootstrap( $container->resolver() );
 	}
 

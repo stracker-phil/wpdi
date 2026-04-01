@@ -23,18 +23,20 @@ class Container implements ContainerInterface {
 	/**
 	 * Bind a service to the container
 	 * Only accepts class names or interfaces - no magic strings
+	 *
+	 * @throws Not_Found_Exception When the requested (abstract) class or interface does not exist.
 	 */
 	public function bind( string $abstract, ?callable $factory = null, bool $singleton = true ): void {
 		// Validate that abstract is a class or interface name
 		if ( ! class_exists( $abstract ) && ! interface_exists( $abstract ) ) {
-			throw new Container_Exception( "'{$abstract}' must be a valid class or interface name" );
+			throw new Not_Found_Exception( "'{$abstract}' must be a valid class or interface name" );
 		}
 
 		if ( null === $factory ) {
 			$factory = fn() => $this->autowire( $abstract );
 		}
 
-		// Note: is_callable() check omitted - the ?callable type hint ensures this at compile time
+		// Note: is_callable() check omitted - the ?callable type hint ensures this at compile time.
 
 		$this->bindings[ $abstract ] = array(
 			'factory'   => $factory,
@@ -47,6 +49,11 @@ class Container implements ContainerInterface {
 	 * Only accepts class names - no magic strings
 	 *
 	 * @return mixed Service instance
+	 *
+	 * @throws Not_Found_Exception When the requested class or interface does not exist.
+	 * @throws Circular_Dependency_Exception When depending on a parent class
+	 * @throws Container_Exception Dependency is not instantiable.
+	 * @throws Container_Exception Unresolvable dependency.
 	 */
 	public function get( string $id ) {
 		// Validate that id is a class name
@@ -198,6 +205,10 @@ class Container implements ContainerInterface {
 
 	/**
 	 * Autowire a class using reflection
+	 *
+	 * @throws Circular_Dependency_Exception When depending on a parent class
+	 * @throws Container_Exception Dependency is not instantiable.
+	 * @throws Container_Exception Unresolvable dependency.
 	 */
 	private function autowire( string $class_name ): object {
 		// Check for circular dependency
@@ -232,13 +243,15 @@ class Container implements ContainerInterface {
 
 			return $instance;
 		} finally {
-			// Always remove from resolution stack
+			// Always remove from the resolution stack
 			unset( $this->resolving[ $class_name ] );
 		}
 	}
 
 	/**
 	 * Resolve constructor dependencies
+	 *
+	 * @throws Container_Exception Unresolvable dependency
 	 */
 	private function resolve_dependencies( array $parameters ): array {
 		$dependencies = array();
@@ -256,11 +269,15 @@ class Container implements ContainerInterface {
 	 * @param string $abstract   Interface or class name.
 	 * @param string $param_name Parameter name prefixed with '$', or empty string for default.
 	 * @return mixed Service instance.
+	 *
+	 * @throws Container_Exception Depending on an undefined class implementation (problem in
+	 *                             wpdi-config.php)
+	 *                             {@see https://github.com/stracker-phil/wpdi/blob/main/docs/configuration.md#conditional-bindings}
 	 */
 	private function resolve_contextual_binding( string $abstract, string $param_name ) {
 		$factories = $this->contextual_bindings[ $abstract ];
 
-		// Try exact match first, then fall back to default
+		// Try an exact match first, then fall back to default
 		if ( isset( $factories[ $param_name ] ) ) {
 			$key = $param_name;
 		} elseif ( isset( $factories[''] ) ) {
@@ -287,6 +304,7 @@ class Container implements ContainerInterface {
 	 * Resolve a single parameter
 	 *
 	 * @return mixed Resolved parameter value
+	 * @throws Container_Exception Unresolvable dependency
 	 */
 	private function resolve_parameter( ReflectionParameter $parameter ) {
 		$type = $parameter->getType();
