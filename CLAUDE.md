@@ -30,7 +30,7 @@ src/
   Compiler.php           # Generates cache/wpdi-container.php (metadata array)
   Cache_Manager.php      # Incremental cache staleness detection and updates
   version-check.php      # Multi-plugin version conflict detection
-  Commands/              # WP-CLI: compile, list, inspect, clear + Cli::register_commands() entry point
+  Commands/              # WP-CLI: compile, list, inspect (ins), clear, depends (dep) + Cli::register_commands() entry point
   Exceptions/            # WPDI_Exception > Container_Exception > Not_Found / Circular_Dependency
 tests/
   bootstrap.php          # Mocks WordPress functions (wp_mkdir_p, esc_html, etc.)

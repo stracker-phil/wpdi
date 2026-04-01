@@ -41,10 +41,14 @@ class Cli {
 		require_once __DIR__ . '/List_Command.php';
 		require_once __DIR__ . '/Clear_Command.php';
 		require_once __DIR__ . '/Inspect_Command.php';
+		require_once __DIR__ . '/Depends_Command.php';
 
 		WP_CLI::add_command( 'di compile', Compile_Command::class );
 		WP_CLI::add_command( 'di list', List_Command::class );
 		WP_CLI::add_command( 'di clear', Clear_Command::class );
 		WP_CLI::add_command( 'di inspect', Inspect_Command::class );
+		WP_CLI::add_command( 'di ins', Inspect_Command::class );
+		WP_CLI::add_command( 'di depends', Depends_Command::class );
+		WP_CLI::add_command( 'di dep', Depends_Command::class );
 	}
 }

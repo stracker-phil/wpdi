@@ -93,12 +93,13 @@ Manual configurations: 2
 
 ## wp di inspect
 
-Inspect a class and display its dependency tree.
+Inspect a class and display its dependency tree. Alias: `wp di ins`
 
 **Synopsis:**
 
 ```bash
 wp di inspect <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
+wp di ins <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
 ```
 
 **Options:**
@@ -128,6 +129,45 @@ The output shows:
 - **Dependency tree** with parameter names, types, and namespaces
 - **Warnings** for unbound interfaces or abstract classes
 - **Circular dependency** markers when detected
+
+## wp di depends
+
+List all classes that depend on a given class or interface — the reverse of `wp di inspect`. Alias: `wp di dep`
+
+Useful for answering questions like *"which services consume this interface?"* or *"what breaks if I change this class's constructor?"*
+
+**Synopsis:**
+
+```bash
+wp di depends <class> [--dir=<dir>] [--autowiring-paths=<paths>]
+wp di dep <class> [--dir=<dir>] [--autowiring-paths=<paths>]
+```
+
+**Options:**
+
+- `<class>` - Class or interface name to find dependents for (short or fully-qualified)
+- `--dir=<dir>` - Module directory (default: current directory)
+- `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
+
+Short names are resolved by scanning discovered classes and their dependency FQCNs, so interface names are resolvable even though interfaces aren't concrete classes. If ambiguous, you'll be prompted to use the fully-qualified name.
+
+**Example:**
+
+```
+$ wp di depends Logger_Interface
+
+Dependents of Logger_Interface (MyPlugin\Contracts):
+
+Payment_Gateway    class    $logger    MyPlugin\Services
+Order_Handler      class    $logger    MyPlugin\Services
+Auth_Service       class    $log       MyPlugin\Services\Auth
+```
+
+Each row shows:
+- **Class name** of the dependent
+- **Type** (`class`, `interface`, `abstract`)
+- **Parameter name** through which the dependency is injected
+- **Namespace** of the dependent
 
 ## wp di clear
 
@@ -192,9 +232,14 @@ ls -la cache/wpdi-container.php
 ```bash
 # Inspect a specific service's dependency tree
 wp di inspect Payment_Gateway
+wp di ins Payment_Gateway         # shorthand
 
 # Inspect with depth limit
 wp di inspect Payment_Gateway --depth=2
+
+# Find all services that depend on an interface
+wp di depends Logger_Interface
+wp di dep Logger_Interface        # shorthand
 
 # Clear and re-list
 wp di clear

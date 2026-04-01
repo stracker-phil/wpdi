@@ -149,6 +149,11 @@ wp di list
 
 # Inspect a service's dependency tree
 wp di inspect Payment_Gateway
+wp di ins Payment_Gateway         # shorthand
+
+# Find everything that depends on an interface or class
+wp di depends Logger_Interface
+wp di dep Logger_Interface        # shorthand
 
 # Clear cache
 wp di clear
