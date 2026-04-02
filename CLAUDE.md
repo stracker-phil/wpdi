@@ -23,11 +23,11 @@ ddev exec vendor/bin/phpunit --testdox
 ```
 src/
   Container.php          # PSR-11 DI container, autowiring via reflection
-  Resolver.php           # Limited API wrapper (get/has only) for Scope and factories
+  Resolver.php           # Limited API wrapper (get/has only) for Scope::bootstrap()
   Scope.php              # Base class for plugins/themes (composition root, overridable environment())
   Auto_Discovery.php     # Scans src/ for concrete classes via tokenization
   Class_Inspector.php    # Extracts constructor dependencies via reflection
-  Compiler.php           # Generates cache/wpdi-container.php (metadata array)
+  Compiler.php           # Generates cache/wpdi-container.php ({classes, bindings} array)
   Cache_Manager.php      # Incremental cache staleness detection and updates
   version-check.php      # Multi-plugin version conflict detection
   Commands/              # WP-CLI commands: Command.php (abstract base), Cli.php (register_commands entry point), compile, list, inspect, clear, depends
@@ -44,9 +44,9 @@ adr/                     # Architectural Decision Records
 ## Key Patterns
 
 - **Composition root**: `App::boot(__FILE__)` is the entry point — a static method on `Scope` that is idempotent (duplicate calls are no-ops) and returns `void`. The constructor is `protected`; `boot()` is the only external entry point. `bootstrap(Resolver)` is the single place services are resolved. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
-- **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php`. Contextual bindings use `'$param_name'`-keyed arrays for multiple implementations of the same interface. See [ADR-004](adr/004-zero-config-autowiring.md), [ADR-010](adr/010-contextual-bindings.md).
+- **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php` as static class name strings (`Interface::class => Concrete::class`). Contextual bindings use `'$param_name'`-keyed arrays; the fallback key is `'default'`. See [ADR-004](adr/004-zero-config-autowiring.md), [ADR-010](adr/010-contextual-bindings.md), [ADR-013](adr/013-static-config-format.md).
 - **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
-- **Metadata caching**: Cache stores `{path, mtime, dependencies}` per class, not closures. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
+- **Metadata caching**: Cache stores `{classes: {path, mtime, dependencies}, bindings: {interface => class}}`. Both autowired class metadata and `wpdi-config.php` interface bindings are serialized — the compiled file is a complete deployable artifact. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
 - **Version conflict detection**: `version-check.php` prevents older WPDI from silently breaking when multiple plugins bundle it. See [ADR-008](adr/008-version-conflict-detection.md).
 - **Exception hierarchy**: `WPDI_Exception` > `Container_Exception` (PSR-11) > `Not_Found_Exception` / `Circular_Dependency_Exception`
 
@@ -82,9 +82,11 @@ adr/                     # Architectural Decision Records
 - Verify only concrete, instantiable classes are discovered
 
 **Compiler changes:**
-- Only cache metadata (`path`, `mtime`, `dependencies`) — never closures
-- Update both `Compiler` and `Container::initialize()` together
-- Ensure `var_export()` output is valid PHP 7.4+
+- Cache format is `{classes: {class => [path, mtime, dependencies]}, bindings: {interface => class}}`; old flat-format caches are auto-migrated on load
+- `Compiler::write(array $class_map, array $bindings = [])` — always pass bindings when writing
+- `Cache_Manager::get_cache(string $scope_file, array $config_bindings = [])` — threads bindings through all write paths
+- Update `Compiler`, `Cache_Manager`, and `Container::load_compiled()` together
+- Ensure `var_export()` output is valid PHP 7.4+; config values must be class name strings (not closures)
 
 **WP-CLI command changes:**
 - All commands extend `Command` (abstract base class in `src/Commands/Command.php`); commands only collect data and call parent rendering methods

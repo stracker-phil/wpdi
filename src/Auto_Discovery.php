@@ -145,6 +145,19 @@ class Auto_Discovery {
 	}
 
 	/**
+	 * Get metadata for a single class via reflection
+	 *
+	 * Used for dynamically-discovered dependencies where file path
+	 * is not known from directory scanning.
+	 *
+	 * @param string $class_name Fully qualified class name (must exist).
+	 * @return array|null Metadata array or null if not discoverable.
+	 */
+	public function get_class_metadata( string $class_name ): ?array {
+		return $this->inspector->get_metadata_from_reflection( $class_name );
+	}
+
+	/**
 	 * Filter to only concrete, instantiable classes
 	 *
 	 * @param array $class_map Array mapping class names to file paths

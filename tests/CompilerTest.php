@@ -114,7 +114,7 @@ class CompilerTest extends TestCase {
 		file_put_contents( $this->cache_file, '<?php return ' . var_export( $expected, true ) . ';' );
 		$compiler = new Compiler( $this->temp_dir );
 
-		$this->assertEquals( $expected, $compiler->load() );
+		$this->assertEquals( $expected, $compiler->load()['classes'] );
 	}
 
 	/**
@@ -217,10 +217,12 @@ class CompilerTest extends TestCase {
 		$compiled = require $this->cache_file;
 
 		$this->assertIsArray( $compiled );
-		$this->assertCount( 2, $compiled );
-		$this->assertArrayHasKey( SimpleClass::class, $compiled );
-		$this->assertArrayHasKey( 'WPDI\Tests\Fixtures\ClassWithDependency', $compiled );
-		$this->assertEquals( $class_map, $compiled );
+		$this->assertArrayHasKey( 'classes', $compiled );
+		$classes = $compiled['classes'];
+		$this->assertCount( 2, $classes );
+		$this->assertArrayHasKey( SimpleClass::class, $classes );
+		$this->assertArrayHasKey( 'WPDI\Tests\Fixtures\ClassWithDependency', $classes );
+		$this->assertEquals( $class_map, $classes );
 	}
 
 	// ========================================
@@ -270,8 +272,8 @@ class CompilerTest extends TestCase {
 		$compiler->write( $class_map );
 		$compiled = require $this->cache_file;
 
-		$this->assertCount( $expected_count, $compiled );
-		$this->assertEquals( $class_map, $compiled );
+		$this->assertCount( $expected_count, $compiled['classes'] );
+		$this->assertEquals( $class_map, $compiled['classes'] );
 	}
 
 	public function multiple_classes_provider(): array {

@@ -40,28 +40,37 @@ class Compiler {
 	}
 
 	/**
-	 * Load cached class map from file
+	 * Load cached data from file
 	 *
-	 * Returns empty array if cache file doesn't exist or is corrupted.
-	 * This allows the container to initialize even with a broken cache.
+	 * Returns empty structure if cache file doesn't exist or is corrupted.
+	 * Migrates old flat-format cache files automatically.
 	 *
-	 * @return array Cached class map
+	 * @return array{classes: array, bindings: array}
 	 */
 	public function load(): array {
 		$this->ensure_dir();
 
+		$empty = array( 'classes' => array(), 'bindings' => array() );
+
 		if ( ! file_exists( $this->cache_file ) ) {
-			return array();
+			return $empty;
 		}
 
 		$result = require $this->cache_file;
 
-		// Handle corrupted cache file (invalid return value)
 		if ( ! is_array( $result ) ) {
-			return array();
+			return $empty;
 		}
 
-		return $result;
+		// Migrate old format (flat class map without 'classes' key)
+		if ( ! isset( $result['classes'] ) ) {
+			return array( 'classes' => $result, 'bindings' => array() );
+		}
+
+		return array(
+			'classes'  => $result['classes'],
+			'bindings' => $result['bindings'] ?? array(),
+		);
 	}
 
 	/**
@@ -89,30 +98,39 @@ class Compiler {
 	}
 
 	/**
-	 * Write class map to cache file
+	 * Write class map and config bindings to cache file
 	 *
 	 * NOTE: We cache class metadata (path, mtime, dependencies) for incremental updates.
 	 * Autowired factories can be recreated instantly via reflection.
-	 * User-defined factories (from wpdi-config.php) are never cached.
+	 * Config bindings (interface => class name) are serialized directly.
 	 *
 	 * Silently fails on read-only filesystems - caching is optional.
 	 *
-	 * @param array $class_map Array mapping class names to metadata (path, mtime, dependencies)
+	 * @param array $class_map Class metadata (path, mtime, dependencies)
+	 * @param array $bindings  Config bindings from wpdi-config.php
 	 * @return bool True on success, false on failure (including read-only filesystem)
 	 */
-	public function write( array $class_map ): bool {
+	public function write( array $class_map, array $bindings = array() ): bool {
 		if ( ! $this->ensure_dir() ) {
 			return false;
 		}
 
-		$content = "<?php\n\n";
+		$data = array(
+			'classes'  => $class_map,
+			'bindings' => $bindings,
+		);
+
+		$content  = "<?php\n\n";
 		$content .= "// Auto-generated WPDI cache - do not edit\n";
 		$content .= '// Generated: ' . date( 'Y-m-d H:i:s' ) . "\n";
-		$content .= '// Contains: ' . count( $class_map ) . " discovered classes\n";
-		$content .= "// Format: class => [path, mtime, dependencies]\n\n";
-		$content .= 'return ' . var_export( $class_map, true ) . ";\n";
+		$content .= '// Contains: ' . count( $class_map ) . ' discovered classes';
+		if ( ! empty( $bindings ) ) {
+			$content .= ', ' . count( $bindings ) . ' interface bindings';
+		}
+		$content .= "\n";
+		$content .= "// Format: {classes: {class => [path, mtime, dependencies]}, bindings: {interface => class}}\n\n";
+		$content .= 'return ' . var_export( $data, true ) . ";\n";
 
-		// Suppress warning on write failure (e.g., disk full, permissions changed)
 		return false !== @file_put_contents( $this->cache_file, $content );
 	}
 }

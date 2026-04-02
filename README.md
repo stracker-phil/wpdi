@@ -63,10 +63,8 @@ For interface bindings or classes outside `src/` (e.g., Composer packages), crea
 ```php
 <?php
 return array(
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
-    Cache_Interface::class  => fn( $r ) => new Redis_Cache(
-        $r->get( Logger_Interface::class )
-    ),
+    Logger_Interface::class => WP_Logger:class,
+    Cache_Interface::class  => Redis_Cache::class,
 );
 ```
 

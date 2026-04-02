@@ -10,24 +10,24 @@ Symfony solves this with "named autowiring" — matching the constructor paramet
 
 ## Decision
 
-`wpdi-config.php` accepts an array of factories keyed by `$parameter_name` (prefixed with `$`) as an alternative to a single factory closure. An empty string key (`''`) serves as the default fallback. Each branch is cached as a separate singleton (keyed by `interface::$param_name`). Missing match without a default throws `Container_Exception`.
+`wpdi-config.php` accepts an array of class names keyed by `$parameter_name` (prefixed with `$`) as an alternative to a single class name. The literal key `'default'` serves as the fallback. Each branch is cached as a separate singleton (keyed by `interface::$param_name`). Missing match without a default throws `Container_Exception`.
 
 ```php
 return array(
     Cache_Interface::class => array(
-        '$db_cache'   => fn( $r ) => new Redis_Cache(),
-        '$file_cache' => fn( $r ) => new File_Cache(),
-        ''            => fn( $r ) => new Redis_Cache(),
+        '$db_cache'   => Redis_Cache::class,
+        '$file_cache' => File_Cache::class,
+        'default'     => Redis_Cache::class,
     ),
 );
 ```
 
-The container detects contextual bindings in `resolve_parameter()` before falling through to regular `get()`. Direct `$container->get()` calls on a contextual interface use the `''` default.
+The container detects contextual bindings in `resolve_parameter()` before falling through to regular `get()`. Direct `$container->get()` calls on a contextual interface use the `'default'` branch.
 
 ## Consequences
 
 - Multiple implementations of one interface without wrapper interfaces or naming magic
 - Explicit `$`-prefixed keys make it clear the routing is based on variable names
 - Each branch is a true singleton — no duplicate instances for the same branch
-- Simple bindings (single closure) remain unchanged — fully backwards compatible
-- `Compiler` and `Cache_Manager` require no changes (contextual bindings are user-defined factories, never cached as metadata)
+- Static class name values (no callables) make the config fully serializable and inspectable
+- Contextual bindings are cached in the `bindings` section of `cache/wpdi-container.php` alongside class metadata (see ADR-005 amendment)

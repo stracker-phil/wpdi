@@ -20,7 +20,7 @@
 
 ```php
 return array(
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Logger_Interface::class => WP_Logger::class,
 );
 ```
 
@@ -78,10 +78,8 @@ class My_Service {
 Option changes not reflected? Don't pass `get_option()` to constructors:
 
 ```php
-// ❌ Wrong - cached at instantiation
-My_Service::class => fn( $r ) => new My_Service(
-    get_option( 'setting' )
-),
+// ❌ Wrong - constructor args are cached at instantiation, not re-read
+// (Don't pass get_option() to constructors — use method-level calls instead)
 
 // ✅ Correct - fetch in methods
 class My_Service {
@@ -123,20 +121,20 @@ services:
 
 ## Contextual Binding Not Matching
 
-**Error:** `No contextual binding for 'Cache_Interface' matching parameter '$my_cache' and no default '' binding defined`
+**Error:** `No contextual binding for 'Cache_Interface' matching parameter '$my_cache' and no 'default' binding defined`
 
 **Causes:**
 
 - Parameter name doesn't match any key in the contextual binding array
-- No default (`''`) key defined
+- No `'default'` key defined
 
-**Fix:** Either add a matching `'$my_cache'` key or add a `''` default:
+**Fix:** Either add a matching `'$my_cache'` key or add a `'default'` fallback:
 
 ```php
 return array(
     Cache_Interface::class => array(
-        '$my_cache' => fn( $r ) => new Redis_Cache(),  // Add matching key
-        ''          => fn( $r ) => new Redis_Cache(),   // Or add a default
+        '$my_cache' => Redis_Cache::class,  // Add matching key
+        'default'   => Redis_Cache::class,  // Or add a default
     ),
 );
 ```

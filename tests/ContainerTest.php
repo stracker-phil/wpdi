@@ -292,8 +292,8 @@ class ContainerTest extends TestCase {
 	 */
 	public function test_can_load_config_array(): void {
 		$config = array(
-			LoggerInterface::class => fn() => new ArrayLogger(),
-			SimpleClass::class     => fn() => new SimpleClass(),
+			LoggerInterface::class => ArrayLogger::class,
+			SimpleClass::class     => SimpleClass::class,
 		);
 
 		$this->container->load_config( $config );
@@ -311,13 +311,14 @@ class ContainerTest extends TestCase {
 	 * THEN all classes are registered and autowirable
 	 */
 	public function test_can_load_compiled_classes(): void {
-		// load_compiled expects class => filepath mapping
-		$class_map = array(
-			SimpleClass::class         => '/fake/path/SimpleClass.php',
-			ClassWithDependency::class => '/fake/path/ClassWithDependency.php',
-		);
-
-		$this->container->load_compiled( $class_map );
+		// load_compiled expects cache array with 'classes' and 'bindings' sections
+		$this->container->load_compiled( array(
+			'classes' => array(
+				SimpleClass::class         => '/fake/path/SimpleClass.php',
+				ClassWithDependency::class => '/fake/path/ClassWithDependency.php',
+			),
+			'bindings' => array(),
+		) );
 
 		// Classes should be registered
 		$this->assertTrue( $this->container->has( SimpleClass::class ) );
@@ -341,8 +342,11 @@ class ContainerTest extends TestCase {
 		$customInstance = new SimpleClass();
 		$this->container->bind( SimpleClass::class, fn() => $customInstance );
 
-		// Load compiled classes including SimpleClass (expects class => filepath mapping)
-		$this->container->load_compiled( array( SimpleClass::class => '/fake/path/SimpleClass.php' ) );
+		// Load compiled classes including SimpleClass (expects cache array with classes and bindings)
+		$this->container->load_compiled( array(
+			'classes'  => array( SimpleClass::class => '/fake/path/SimpleClass.php' ),
+			'bindings' => array(),
+		) );
 
 		// Should still return the custom instance, not autowired
 		$retrieved = $this->container->get( SimpleClass::class );
@@ -400,7 +404,7 @@ class ContainerTest extends TestCase {
 
 		// Create a config file that binds an interface
 		$config_file    = $temp_dir . '/wpdi-config.php';
-		$config_content = "<?php\nreturn array(\n    '" . LoggerInterface::class . "' => function() {\n        return new " . ArrayLogger::class . "();\n    },\n);";
+		$config_content = "<?php\nreturn array(\n    '" . LoggerInterface::class . "' => '" . ArrayLogger::class . "',\n);";
 		file_put_contents( $config_file, $config_content );
 
 		// Create a fake scope file (initialize expects __FILE__ path)
@@ -624,8 +628,8 @@ PHP;
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache'   => fn() => new DB_Cache(),
-				'$file_cache' => fn() => new File_Cache(),
+				'$db_cache'   => DB_Cache::class,
+				'$file_cache' => File_Cache::class,
 			)
 		);
 
@@ -638,14 +642,14 @@ PHP;
 	/**
 	 * GIVEN a contextual binding with a default (empty string key)
 	 * WHEN a parameter name doesn't match any specific key
-	 * THEN the default factory is used
+	 * THEN the default binding is used
 	 */
 	public function test_contextual_binding_uses_default_for_unmatched_param(): void {
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache' => fn() => new DB_Cache(),
-				''          => fn() => new File_Cache(),
+				'$db_cache' => DB_Cache::class,
+				'default'   => File_Cache::class,
 			)
 		);
 
@@ -663,7 +667,7 @@ PHP;
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache' => fn() => new DB_Cache(),
+				'$db_cache' => DB_Cache::class,
 			)
 		);
 
@@ -682,15 +686,13 @@ PHP;
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache'   => fn() => new DB_Cache(),
-				'$file_cache' => fn() => new File_Cache(),
+				'$db_cache'   => DB_Cache::class,
+				'$file_cache' => File_Cache::class,
 			)
 		);
 
 		$instance1 = $this->container->get( ClassWithContextualDeps::class );
 
-		// Clear the autowired class singleton to force re-resolution of params
-		// But contextual singletons should persist
 		$this->assertInstanceOf( DB_Cache::class, $instance1->get_db_cache() );
 		$this->assertInstanceOf( File_Cache::class, $instance1->get_file_cache() );
 		$this->assertNotSame( $instance1->get_db_cache(), $instance1->get_file_cache() );
@@ -703,14 +705,14 @@ PHP;
 	/**
 	 * GIVEN a contextual binding with a default
 	 * WHEN get() is called directly on the interface
-	 * THEN the default factory is used
+	 * THEN the default binding is used
 	 */
 	public function test_contextual_binding_direct_get_uses_default(): void {
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache' => fn() => new DB_Cache(),
-				''          => fn() => new File_Cache(),
+				'$db_cache' => DB_Cache::class,
+				'default'   => File_Cache::class,
 			)
 		);
 
@@ -728,7 +730,7 @@ PHP;
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'$db_cache' => fn() => new DB_Cache(),
+				'$db_cache' => DB_Cache::class,
 			)
 		);
 
@@ -745,11 +747,11 @@ PHP;
 	 */
 	public function test_load_config_handles_contextual_bindings(): void {
 		$config = array(
-			LoggerInterface::class => fn() => new ArrayLogger(),
+			LoggerInterface::class => ArrayLogger::class,
 			CacheInterface::class  => array(
-				'$db_cache'   => fn() => new DB_Cache(),
-				'$file_cache' => fn() => new File_Cache(),
-				''            => fn() => new DB_Cache(),
+				'$db_cache'   => DB_Cache::class,
+				'$file_cache' => File_Cache::class,
+				'default'     => DB_Cache::class,
 			),
 		);
 
@@ -774,7 +776,7 @@ PHP;
 		$this->container->bind_contextual(
 			CacheInterface::class,
 			array(
-				'no_dollar' => fn() => new DB_Cache(),
+				'no_dollar' => DB_Cache::class,
 			)
 		);
 	}

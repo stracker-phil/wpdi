@@ -5,9 +5,6 @@
 
 namespace WPDI\Commands;
 
-use Closure;
-use ReflectionException;
-use ReflectionFunction;
 use ReflectionNamedType;
 use WP_CLI;
 use WPDI\Auto_Discovery;
@@ -335,29 +332,11 @@ class Depends_Command extends Command {
 	/**
 	 * Extract the concrete class name from a binding value.
 	 *
-	 * Handles string class names and typed closures (reads the declared return type).
-	 * Returns null when the class cannot be determined (untyped closure, scalar, etc.).
-	 *
 	 * @param mixed $binding Raw binding value from wpdi-config.php.
-	 * @return string|null Resolved FQCN or short class name, or null.
+	 * @return string|null Resolved FQCN, or null when not a string.
 	 */
 	private function resolve_binding_class( $binding ): ?string {
-		if ( is_string( $binding ) ) {
-			return $binding;
-		}
-
-		if ( $binding instanceof Closure ) {
-			try {
-				$rt = ( new ReflectionFunction( $binding ) )->getReturnType();
-				if ( $rt instanceof ReflectionNamedType && ! $rt->isBuiltin() ) {
-					return $rt->getName();
-				}
-			} catch ( ReflectionException $e ) {
-				return null;
-			}
-		}
-
-		return null;
+		return is_string( $binding ) ? $binding : null;
 	}
 
 }

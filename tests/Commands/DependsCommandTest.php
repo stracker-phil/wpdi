@@ -373,7 +373,7 @@ class DependsCommandTest extends TestCase {
 		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
 
 		// Write wpdi-config.php binding CacheInterface → DB_Cache.
-		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => fn(\$r) => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ];";
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => \\WPDI\\Tests\\Fixtures\\DB_Cache::class ];";
 		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
 
 		$command = new Depends_Command();
@@ -423,7 +423,7 @@ class DependsCommandTest extends TestCase {
 		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\DB_Cache', 'cache' );
 
 		// Write wpdi-config.php binding CacheInterface → DB_Cache.
-		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => fn(\$r) => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ];";
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => \\WPDI\\Tests\\Fixtures\\DB_Cache::class ];";
 		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
 
 		$command = new Depends_Command();
@@ -465,16 +465,16 @@ class DependsCommandTest extends TestCase {
 	}
 
 	/**
-	 * GIVEN an interface bound in config via a typed closure on the interface key
+	 * GIVEN an interface bound in config via a contextual binding on the interface key
 	 * WHEN finding dependents of that interface
-	 * THEN config mapping should show "as ConcreteClass" from the closure's return type
+	 * THEN config mapping should show "as ConcreteClass"
 	 */
-	public function test_shows_as_label_for_interface_keyed_closure_binding(): void {
-		$consumer = 'Closure_Consumer_' . uniqid();
+	public function test_shows_as_label_for_interface_keyed_contextual_binding(): void {
+		$consumer = 'Contextual_Consumer_' . uniqid();
 		$this->createClassWithDependency( $consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
 
-		// Interface-keyed param binding with typed closure: CacheInterface['$cache'] => fn():DB_Cache.
-		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => [ '\$cache' => static fn(): \\WPDI\\Tests\\Fixtures\\DB_Cache => new \\WPDI\\Tests\\Fixtures\\DB_Cache() ] ];";
+		// Interface-keyed param binding: CacheInterface['$cache'] => DB_Cache.
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => [ '\$cache' => \\WPDI\\Tests\\Fixtures\\DB_Cache::class ] ];";
 		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
 
 		$command = new Depends_Command();

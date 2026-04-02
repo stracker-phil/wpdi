@@ -85,10 +85,8 @@ The original decision stated factory values are opaque. This was subsequently re
 4. `$config[TargetInterface]` as a non-array value → `as ConcreteClass` (simple global binding)
 5. No binding found → `-`
 
-Both string class names (`SomeClass::class`) and **typed closures** (`fn(): SomeClass => ...`)
-are resolved. For typed closures, `ReflectionFunction::getReturnType()` is used to extract the
-declared return type at definition time. Untyped closures and non-closure callables fall through
-to `-`.
+Config values are static class name strings (see ADR-013). The command reads each binding
+value directly as a FQCN to resolve the `as ConcreteClass` label.
 
 This means `wp di depends RandomizerInterface` correctly shows `as Randomizer` for all
-consumers when the config has `RandomizerInterface::class => ['$randomizer' => fn():Randomizer => ...]`.
+consumers when the config has `RandomizerInterface::class => ['$randomizer' => Randomizer::class]`.

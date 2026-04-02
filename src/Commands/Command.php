@@ -322,12 +322,13 @@ abstract class Command {
 				// Value must already be a normalized type label.
 				return WP_CLI::colorize( $this->get_type_color( $value ) . $value . '%n' );
 			case 'via':
-				// Value is pre-formatted as 'via ShortName', or empty when there is no binding.
+				// Value is pre-formatted as 'via ShortName' or 'as ShortName', or empty.
 				if ( '' === $value ) {
 					return $value;
 				}
 				$space = (int) strpos( $value, ' ' );
-				return substr( $value, 0, $space + 1 ) . WP_CLI::colorize( '%c' . substr( $value, $space + 1 ) . '%n' );
+				$color = 0 === strpos( $value, 'as ' ) ? '%g' : '%c';
+				return substr( $value, 0, $space + 1 ) . WP_CLI::colorize( $color . substr( $value, $space + 1 ) . '%n' );
 			case 'bool':
 				if ( 'no' === $value || 'false' === $value || '0' === $value ) {
 					return WP_CLI::colorize( '%r' . $value . '%n' );

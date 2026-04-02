@@ -269,7 +269,7 @@ class ListCommandTest extends TestCase {
 		$config_content = <<<'PHP'
 <?php
 return array(
-	'Logger_Interface' => fn( $r ) => new stdClass(),
+	'Logger_Interface' => 'stdClass',
 );
 PHP;
 		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config_content );

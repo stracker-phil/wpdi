@@ -73,7 +73,7 @@ class Container implements ContainerInterface {
 
 		// Contextual binding called directly — use default branch
 		if ( isset( $this->contextual_bindings[ $id ] ) ) {
-			return $this->resolve_contextual_binding( $id, '' );
+			return $this->resolve_contextual_binding( $id, 'default' );
 		}
 
 		// Try autowiring
@@ -97,68 +97,72 @@ class Container implements ContainerInterface {
 	/**
 	 * Bind a contextual service to the container
 	 *
-	 * Accepts an array of factories keyed by parameter name (prefixed with '$')
-	 * or an empty string for the default. Each branch is cached as a separate singleton.
+	 * Accepts an array of class names keyed by parameter name (prefixed with '$')
+	 * or 'default' for the fallback. Each branch is cached as a separate singleton.
 	 *
-	 * @param string $abstract  Interface or class name.
-	 * @param array  $factories Map of '$param_name' => callable factories.
+	 * @param string $abstract Interface or class name.
+	 * @param array  $bindings Map of '$param_name' => concrete class name strings.
 	 */
-	public function bind_contextual( string $abstract, array $factories ): void {
+	public function bind_contextual( string $abstract, array $bindings ): void {
 		if ( ! class_exists( $abstract ) && ! interface_exists( $abstract ) ) {
 			throw new Container_Exception( "'{$abstract}' must be a valid class or interface name" );
 		}
 
 		$validated = array();
 
-		foreach ( $factories as $key => $factory ) {
-			if ( '' !== $key && ! preg_match( '/^\$[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/', $key ) ) {
-				throw new Container_Exception( "Invalid contextual binding key '{$key}': must be a \$variable_name or empty string" );
+		foreach ( $bindings as $key => $concrete ) {
+			if ( 'default' !== $key && ! preg_match( '/^\$[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/', $key ) ) {
+				throw new Container_Exception( "Invalid contextual binding key '{$key}': must be a \$variable_name or 'default'" );
 			}
 
-			if ( ! is_callable( $factory ) ) {
-				throw new Container_Exception( "Contextual binding factory for '{$abstract}[{$key}]' must be callable" );
+			if ( ! is_string( $concrete ) || ( ! class_exists( $concrete ) && ! interface_exists( $concrete ) ) ) {
+				throw new Container_Exception( "Contextual binding for '{$abstract}[{$key}]' must be a valid class or interface name" );
 			}
 
-			$validated[ $key ] = $factory;
+			$validated[ $key ] = $concrete;
 		}
 
 		$this->contextual_bindings[ $abstract ] = $validated;
 	}
 
 	/**
-	 * Load configuration from file
+	 * Load interface bindings from configuration
+	 *
+	 * @param array $config Map of interface => concrete class name (string) or
+	 *                      interface => array of contextual bindings.
+	 *
+	 * @throws Container_Exception When a binding value is not a valid class or interface name.
 	 */
 	public function load_config( array $config ): void {
-		foreach ( $config as $abstract => $factory ) {
-			if ( is_array( $factory ) ) {
-				$this->bind_contextual( $abstract, $factory );
+		foreach ( $config as $abstract => $concrete ) {
+			if ( is_array( $concrete ) ) {
+				$this->bind_contextual( $abstract, $concrete );
 			} else {
-				$this->bind( $abstract, $factory );
+				if ( ! is_string( $concrete ) || ( ! class_exists( $concrete ) && ! interface_exists( $concrete ) ) ) {
+					throw new Container_Exception(
+						"Binding for '{$abstract}' must be a valid class or interface name, got " .
+						( is_string( $concrete ) ? "'{$concrete}'" : gettype( $concrete ) )
+					);
+				}
+
+				$this->bind( $abstract, fn() => $this->get( $concrete ) );
 			}
 		}
 	}
 
 	/**
-	 * Load compiled class list from cache
+	 * Load compiled cache — registers interface bindings from cache
 	 *
-	 * Skips stale entries (classes that no longer exist after refactoring).
-	 * The cache will be rebuilt on next compile or when staleness is detected.
+	 * Concrete classes from the 'classes' section are not pre-bound here;
+	 * they are autowired on demand when first requested via get().
 	 *
-	 * @param array $class_map Array mapping class names to metadata (path, mtime, dependencies)
+	 * @param array $cache Array with 'classes' (metadata) and 'bindings' (interface => class) sections.
 	 */
-	public function load_compiled( array $class_map ): void {
-		// Bind each cached class (autowiring will recreate factories)
-		foreach ( $class_map as $class => $metadata ) {
-			if ( isset( $this->bindings[ $class ] ) ) {
-				continue;
-			}
+	public function load_compiled( array $cache ): void {
+		$bindings = $cache['bindings'] ?? array();
 
-			try {
-				$this->bind( $class );
-			} catch ( Container_Exception $e ) {
-				// Skip stale cache entries (classes that no longer exist)
-				continue;
-			}
+		if ( ! empty( $bindings ) ) {
+			$this->load_config( $bindings );
 		}
 	}
 
@@ -175,16 +179,13 @@ class Container implements ContainerInterface {
 		$base_path   = dirname( $scope_file );
 		$config_file = $base_path . '/wpdi-config.php';
 
-		// Load user configuration first
-		if ( file_exists( $config_file ) ) {
-			$this->load_config( require $config_file );
-		}
+		$config_bindings = file_exists( $config_file ) ? require $config_file : array();
 
-		// Delegate cache management
+		// Delegate cache management — bindings are included in the compiled output
 		$cache_manager = new Cache_Manager( $base_path, $autowiring_paths, $environment );
-		$class_map     = $cache_manager->get_class_map( $scope_file );
+		$cached        = $cache_manager->get_cache( $scope_file, $config_bindings );
 
-		$this->load_compiled( $class_map );
+		$this->load_compiled( $cached );
 	}
 
 	/**
@@ -267,7 +268,7 @@ class Container implements ContainerInterface {
 	 * Resolve a contextual binding by parameter name
 	 *
 	 * @param string $abstract   Interface or class name.
-	 * @param string $param_name Parameter name prefixed with '$', or empty string for default.
+	 * @param string $param_name Parameter name prefixed with '$', or 'default' for default.
 	 * @return mixed Service instance.
 	 *
 	 * @throws Container_Exception Depending on an undefined class implementation (problem in
@@ -275,16 +276,16 @@ class Container implements ContainerInterface {
 	 *                             {@see https://github.com/stracker-phil/wpdi/blob/main/docs/configuration.md#conditional-bindings}
 	 */
 	private function resolve_contextual_binding( string $abstract, string $param_name ) {
-		$factories = $this->contextual_bindings[ $abstract ];
+		$bindings = $this->contextual_bindings[ $abstract ];
 
 		// Try an exact match first, then fall back to default
-		if ( isset( $factories[ $param_name ] ) ) {
+		if ( isset( $bindings[ $param_name ] ) ) {
 			$key = $param_name;
-		} elseif ( isset( $factories[''] ) ) {
-			$key = '';
+		} elseif ( isset( $bindings['default'] ) ) {
+			$key = 'default';
 		} else {
 			throw new Container_Exception(
-				"No contextual binding for '{$abstract}' matching parameter '{$param_name}' and no default '' binding defined"
+				"No contextual binding for '{$abstract}' matching parameter '{$param_name}' and no 'default' binding defined"
 			);
 		}
 
@@ -294,7 +295,7 @@ class Container implements ContainerInterface {
 			return $this->instances[ $cache_key ];
 		}
 
-		$instance                      = $factories[ $key ]( $this->resolver() );
+		$instance                      = $this->get( $bindings[ $key ] );
 		$this->instances[ $cache_key ] = $instance;
 
 		return $instance;

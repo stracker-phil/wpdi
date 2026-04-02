@@ -107,6 +107,7 @@ class Compile_Command extends Command {
 
 		// Check for manual configuration
 		$config_file    = $path . '/wpdi-config.php';
+		$config         = array();
 		$manual_configs = array();
 		if ( file_exists( $config_file ) ) {
 			$this->log( 'Loading configuration from wpdi-config.php...' );
@@ -134,7 +135,7 @@ class Compile_Command extends Command {
 
 		$this->log( 'Compiling container cache...' );
 
-		if ( $compiler->write( $classes ) ) {
+		if ( $compiler->write( $classes, $config ) ) {
 			$this->success( 'Container compiled successfully to ' . $compiler->get_cache_file() );
 
 			// Show statistics

@@ -59,13 +59,13 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN no cache file exists
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN it rebuilds cache from scratch and creates the cache file
 	 */
 	public function test_rebuilds_cache_when_missing(): void {
 		$cache_manager = new Cache_Manager( $this->test_base_path );
 
-		$result = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertIsArray( $result );
 		$this->assertFileExists( $this->cache_file );
@@ -73,7 +73,7 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN a valid cache file exists in production
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN it returns cached map without checking staleness
 	 */
 	public function test_returns_cached_map_in_production(): void {
@@ -87,14 +87,60 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertEquals( $cached_data, $result );
+		$this->assertEquals( $cached_data, $result['classes'] );
+	}
+
+	/**
+	 * GIVEN a production cache with no bindings AND a live config file
+	 * WHEN get_cache() is called with config bindings
+	 * THEN live config bindings are returned (not empty cached bindings)
+	 */
+	public function test_production_uses_live_config_bindings_when_cache_has_none(): void {
+		$cached_data = array(
+			SimpleClass::class => array(
+				'path'         => '/fake/path.php',
+				'mtime'        => time(),
+				'dependencies' => array(),
+			),
+		);
+		$this->write_cache_file( $cached_data );
+
+		$live_bindings = array( 'SomeInterface' => 'SomeConcrete' );
+
+		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php', $live_bindings );
+
+		$this->assertEquals( $live_bindings, $result['bindings'] );
+		$this->assertEquals( $cached_data, $result['classes'] );
+	}
+
+	/**
+	 * GIVEN a production cache with bindings AND no config file (deployable artifact)
+	 * WHEN get_cache() is called with empty config bindings
+	 * THEN cached bindings are used as fallback
+	 */
+	public function test_production_uses_cached_bindings_when_no_config_file(): void {
+		$cached_classes  = array(
+			SimpleClass::class => array(
+				'path'         => '/fake/path.php',
+				'mtime'        => time(),
+				'dependencies' => array(),
+			),
+		);
+		$cached_bindings = array( 'SomeInterface' => 'SomeConcrete' );
+		$this->write_cache_file( $cached_classes, $cached_bindings );
+
+		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php', array() );
+
+		$this->assertEquals( $cached_bindings, $result['bindings'] );
 	}
 
 	/**
 	 * GIVEN various invalid cache states
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN it triggers a full cache rebuild
 	 *
 	 * @dataProvider invalid_cache_provider
@@ -103,7 +149,7 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertIsArray( $result );
 	}
@@ -139,7 +185,7 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN files that trigger cache staleness
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN it rebuilds the cache
 	 *
 	 * @dataProvider staleness_trigger_provider
@@ -168,7 +214,7 @@ class CacheManagerTest extends TestCase {
 			: $this->test_base_path . '/scope.php';
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $scope_file );
+		$result        = $cache_manager->get_cache( $scope_file );
 
 		// Should have rebuilt (empty src/ means empty result)
 		$this->assertIsArray( $result );
@@ -195,7 +241,7 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN cached class with file that no longer exists
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN the class is removed from cache
 	 */
 	public function test_removes_deleted_files_from_cache(): void {
@@ -209,14 +255,14 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayNotHasKey( 'DeletedClass', $result );
+		$this->assertArrayNotHasKey( 'DeletedClass', $result['classes'] );
 	}
 
 	/**
 	 * GIVEN cached class with unmodified file
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN the cached metadata is preserved exactly
 	 */
 	public function test_preserves_unmodified_files(): void {
@@ -235,16 +281,16 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayHasKey( 'UnmodifiedClass', $result );
-		$this->assertSame( $file_path, $result['UnmodifiedClass']['path'] );
-		$this->assertSame( $file_mtime, $result['UnmodifiedClass']['mtime'] );
+		$this->assertArrayHasKey( 'UnmodifiedClass', $result['classes'] );
+		$this->assertSame( $file_path, $result['classes']['UnmodifiedClass']['path'] );
+		$this->assertSame( $file_mtime, $result['classes']['UnmodifiedClass']['mtime'] );
 	}
 
 	/**
 	 * GIVEN cached class with modified file
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN the file is re-parsed and metadata updated
 	 */
 	public function test_reparses_modified_files(): void {
@@ -267,7 +313,7 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// File should be re-parsed but may not have loadable class
 		// The key behavior is that the cache was updated
@@ -280,21 +326,21 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN empty src directory
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN cache file is created with empty array
 	 */
 	public function test_creates_cache_file_for_empty_src(): void {
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertFileExists( $this->cache_file );
 		$this->assertIsArray( $result );
-		$this->assertEmpty( $result );
+		$this->assertEmpty( $result['classes'] );
 	}
 
 	/**
 	 * GIVEN cache directory does not exist
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN cache directory is created and cache file written
 	 */
 	public function test_creates_cache_directory(): void {
@@ -302,7 +348,7 @@ class CacheManagerTest extends TestCase {
 		rmdir( dirname( $this->cache_file ) );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertDirectoryExists( dirname( $this->cache_file ) );
 		$this->assertFileExists( $this->cache_file );
@@ -315,7 +361,7 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN cached classes with dependencies referencing existing instantiable classes
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN new dependencies are discovered and added with their metadata
 	 */
 	public function test_discovers_new_dependencies(): void {
@@ -335,19 +381,19 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// SimpleClass should be discovered as dependency
-		$this->assertArrayHasKey( SimpleClass::class, $result );
-		$this->assertArrayHasKey( 'path', $result[ SimpleClass::class ] );
-		$this->assertArrayHasKey( 'mtime', $result[ SimpleClass::class ] );
-		$this->assertArrayHasKey( 'dependencies', $result[ SimpleClass::class ] );
-		$this->assertEmpty( $result[ SimpleClass::class ]['dependencies'] );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
+		$this->assertArrayHasKey( 'path', $result['classes'][ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'mtime', $result['classes'][ SimpleClass::class ] );
+		$this->assertArrayHasKey( 'dependencies', $result['classes'][ SimpleClass::class ] );
+		$this->assertEmpty( $result['classes'][ SimpleClass::class ]['dependencies'] );
 	}
 
 	/**
 	 * GIVEN a dependency chain A -> B -> C
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN all dependencies are discovered transitively
 	 */
 	public function test_discovers_transitive_dependencies(): void {
@@ -367,16 +413,16 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// SimpleClass has no dependencies, but should be discovered
-		$this->assertArrayHasKey( SimpleClass::class, $result );
-		$this->assertEmpty( $result[ SimpleClass::class ]['dependencies'] );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
+		$this->assertEmpty( $result['classes'][ SimpleClass::class ]['dependencies'] );
 	}
 
 	/**
 	 * GIVEN dependencies that cannot be added to cache
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN these dependencies are ignored and not added to the result
 	 *
 	 * @dataProvider non_cacheable_dependency_provider
@@ -400,10 +446,10 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayNotHasKey( $dependency_class, $result, "Failed for: {$reason}" );
-		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayNotHasKey( $dependency_class, $result['classes'], "Failed for: {$reason}" );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
 	}
 
 	public function non_cacheable_dependency_provider(): array {
@@ -421,7 +467,7 @@ class CacheManagerTest extends TestCase {
 
 	/**
 	 * GIVEN cached metadata with missing dependencies array
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN it handles gracefully and continues without error
 	 */
 	public function test_handles_metadata_without_dependencies_array(): void {
@@ -441,14 +487,14 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
 	}
 
 	/**
 	 * GIVEN a modified PHP file containing multiple classes (class rename scenario)
-	 * WHEN get_class_map() is called
+	 * WHEN get_cache() is called
 	 * THEN all classes from the re-parsed file are added to the cache
 	 */
 	public function test_handles_multiple_classes_from_reparsed_file(): void {
@@ -473,17 +519,17 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayHasKey( $class1, $result );
-		$this->assertArrayHasKey( $class2, $result );
-		$this->assertSame( $temp_file, $result[ $class1 ]['path'] );
-		$this->assertSame( $temp_file, $result[ $class2 ]['path'] );
+		$this->assertArrayHasKey( $class1, $result['classes'] );
+		$this->assertArrayHasKey( $class2, $result['classes'] );
+		$this->assertSame( $temp_file, $result['classes'][ $class1 ]['path'] );
+		$this->assertSame( $temp_file, $result['classes'][ $class2 ]['path'] );
 	}
 
 	/**
 	 * GIVEN a dependency on an internal PHP class (no file path)
-	 * WHEN get_class_map() discovers dependencies
+	 * WHEN get_cache() discovers dependencies
 	 * THEN internal classes are not added to cache (no file path available)
 	 */
 	public function test_ignores_internal_classes_as_dependencies(): void {
@@ -503,14 +549,14 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
 	}
 
 	/**
 	 * GIVEN a deep dependency chain A -> B -> C
-	 * WHEN get_class_map() discovers dependencies
+	 * WHEN get_cache() discovers dependencies
 	 * THEN all levels are discovered transitively
 	 */
 	public function test_discovers_multi_level_transitive_dependencies(): void {
@@ -529,20 +575,20 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayHasKey( ClassWithChainedDependency::class, $result );
-		$this->assertArrayHasKey( ClassWithDependency::class, $result );
-		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayHasKey( ClassWithChainedDependency::class, $result['classes'] );
+		$this->assertArrayHasKey( ClassWithDependency::class, $result['classes'] );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
 		$this->assertContains(
 			SimpleClass::class,
-			$result[ ClassWithDependency::class ]['dependencies']
+			$result['classes'][ ClassWithDependency::class ]['dependencies']
 		);
 	}
 
 	/**
 	 * GIVEN a dependency on abstract class
-	 * WHEN get_class_map() discovers dependencies
+	 * WHEN get_cache() discovers dependencies
 	 * THEN abstract classes are not added (not instantiable)
 	 */
 	public function test_ignores_abstract_class_dependencies(): void {
@@ -561,19 +607,23 @@ class CacheManagerTest extends TestCase {
 		$this->write_cache_file( $cached_data );
 
 		$cache_manager = new Cache_Manager( $this->test_base_path );
-		$result        = $cache_manager->get_class_map( $this->test_base_path . '/scope.php' );
+		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
-		$this->assertArrayNotHasKey( 'WPDI\\Tests\\Fixtures\\AbstractClass', $result );
-		$this->assertArrayHasKey( SimpleClass::class, $result );
+		$this->assertArrayNotHasKey( 'WPDI\\Tests\\Fixtures\\AbstractClass', $result['classes'] );
+		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
 	}
 
 	// ========================================
 	// Helper Methods
 	// ========================================
 
-	private function write_cache_file( array $data ): void {
-		$content = "<?php\n// WPDI Container Cache\n\nreturn ";
-		$content .= var_export( $data, true ) . ";\n";
+	private function write_cache_file( array $data, array $bindings = array() ): void {
+		$structured = array(
+			'classes'  => $data,
+			'bindings' => $bindings,
+		);
+		$content  = "<?php\n// WPDI Container Cache\n\nreturn ";
+		$content .= var_export( $structured, true ) . ";\n";
 		file_put_contents( $this->cache_file, $content );
 	}
 }

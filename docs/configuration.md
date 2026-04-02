@@ -62,14 +62,12 @@ Use `wpdi-config.php` for interface bindings and external classes.
 <?php
 // wpdi-config.php
 return array(
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
-    Cache_Interface::class  => fn( $r ) => new Redis_Cache(
-        $r->get( Logger_Interface::class )
-    ),
+    Logger_Interface::class => WP_Logger::class,
+    Cache_Interface::class  => Redis_Cache::class,
 );
 ```
 
-Factories receive a `Resolver` (`$r`) with `get()` and `has()` methods for resolving dependencies.
+Map each interface to the concrete class that should be injected. Dependencies of the concrete class are resolved automatically via autowiring.
 
 ## Interface Bindings
 
@@ -86,7 +84,7 @@ class Redis_Cache implements Cache_Interface {
 
 // wpdi-config.php
 return array(
-    Cache_Interface::class => fn( $r ) => new Redis_Cache(),
+    Cache_Interface::class => Redis_Cache::class,
 );
 ```
 
@@ -94,21 +92,21 @@ Any service depending on `Cache_Interface` receives `Redis_Cache`.
 
 ## Contextual Bindings
 
-When multiple services need different implementations of the same interface, use contextual bindings. Instead of a single factory, provide an array of factories keyed by the constructor parameter name (prefixed with `$`):
+When multiple services need different implementations of the same interface, use contextual bindings. Instead of a single class name, provide an array of class names keyed by the constructor parameter name (prefixed with `$`):
 
 ```php
 <?php
 // wpdi-config.php
 return array(
     Cache_Interface::class => array(
-        '$db_cache'   => fn( $r ) => new Redis_Cache(),
-        '$file_cache' => fn( $r ) => new File_Cache(),
-        ''            => fn( $r ) => new Redis_Cache(),  // Default
+        '$db_cache'   => Redis_Cache::class,
+        '$file_cache' => File_Cache::class,
+        'default'     => Redis_Cache::class,
     ),
 );
 ```
 
-Each parameter name in the consuming class determines which factory is used:
+Each parameter name in the consuming class determines which implementation is used:
 
 ```php
 class Report_Service {
@@ -128,27 +126,14 @@ class Notification_Service {
 ### Rules
 
 - **Keys must start with `$`** to make it clear they refer to variable names, e.g. `'$db_cache'`
-- **Default key is `''`** (empty string) — used when no parameter name matches
-- **No default + no match = error** — if no `''` key is defined and the parameter name doesn't match any key, a `Container_Exception` is thrown
+- **Default key is `'default'`** — used when no parameter name matches
+- **No default + no match = error** — if no `'default'` key is defined and the parameter name doesn't match any key, a `Container_Exception` is thrown
 - **Each branch is a singleton** — instances are cached separately per branch, so `$db_cache` and `$file_cache` produce different singleton instances
-- **Calling `$container->get()` directly** on a contextual interface uses the `''` default branch (or throws if none defined)
+- **Calling `$container->get()` directly** on a contextual interface uses the `'default'` branch (or throws if none defined)
 
 ## WordPress Options
 
-Services are **singletons** - factories run once, instances are cached.
-
-### Wrong: Options in Constructor
-
-```php
-// wpdi-config.php
-return array(
-    My_Service::class => fn( $r ) => new My_Service(
-        get_option( 'api_key', '' )  // Cached forever!
-    ),
-);
-```
-
-Option changes are ignored after first instantiation.
+Services are **singletons** — the concrete class is instantiated once and cached.
 
 ### Correct: Options in Methods
 
@@ -160,21 +145,29 @@ class My_Service {
 }
 ```
 
-No configuration needed - autowiring handles it.
+No configuration needed — autowiring handles it.
+
+### Wrong: Options in Constructor
+
+```php
+class My_Service {
+    public function __construct( string $api_key ) {}
+}
+```
+
+Constructor arguments are resolved at first instantiation and cached. Option changes are never picked up.
 
 ## Conditional Bindings
 
-Use constants or environment checks (safe during bootstrap):
+`wpdi-config.php` is a static map — no runtime logic. For environment-dependent bindings, create a `ServiceProvider` class and resolve it from `bootstrap()`:
 
 ```php
-return array(
-    Email_Interface::class => fn( $r ) => defined( 'SMTP_ENABLED' )
-        ? $r->get( SMTP_Mailer::class )
-        : $r->get( WP_Mailer::class ),
-);
+class My_Plugin extends WPDI\Scope {
+    protected function bootstrap( WPDI\Resolver $r ): void {
+        $r->get( Service_Provider::class )->register();
+    }
+}
 ```
-
-**Avoid business logic** in factories - WordPress may not be fully initialized.
 
 ## Best Practices
 
@@ -182,8 +175,8 @@ return array(
 
 ```php
 return array(
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
-    Cache_Interface::class  => fn( $r ) => new Redis_Cache(),
+    Logger_Interface::class => WP_Logger::class,
+    Cache_Interface::class  => Redis_Cache::class,
 );
 ```
 
@@ -191,18 +184,14 @@ return array(
 
 ```php
 return array(
-    'Bad' => new Bad(),                              // Not lazy
-    Bad::class => fn( $r ) => new Bad(
-        get_option( 'x' )                            // Options cached
-    ),
-    'bad' => fn( $r ) => get_option( 'x' ),          // Scalars not allowed
-    'My_Logger' => fn( $r ) => new Bad(),            // Use ::class
+    'Bad'                   => Bad::class,    // String literals not allowed - use ::class
+    Logger_Interface::class => new Bad(),     // Instances not allowed - map to class name
 );
 ```
 
 ## Summary
 
-- Keep `wpdi-config.php` minimal - interface bindings and external classes only
-- Factories receive `Resolver $r` for dependency resolution
+- Keep `wpdi-config.php` minimal — interface bindings and external classes only
+- Map interface names to concrete class names using `Interface::class => Concrete::class`
 - Fetch options in methods, not constructors
 - Always use `::class` as service identifier

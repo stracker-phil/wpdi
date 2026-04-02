@@ -12,8 +12,8 @@ Register a service.
 // Auto-wire concrete class
 $container->bind( Payment_Processor::class );
 
-// Interface with factory
-$container->bind( Logger_Interface::class, fn( $r ) => new WP_Logger() );
+// Interface with factory (direct API — prefer wpdi-config.php for interface bindings)
+$container->bind( Logger_Interface::class, fn() => new WP_Logger() );
 
 // Non-singleton
 $container->bind( Temp_Service::class, null, false );
@@ -48,30 +48,30 @@ $container = new WPDI\Container();
 $container->initialize( __FILE__ );
 ```
 
-### bind_contextual(string $abstract, array $factories): void
+### bind_contextual(string $abstract, array $bindings): void
 
-Register a contextual binding with multiple factories keyed by parameter name.
+Register a contextual binding with multiple class names keyed by parameter name.
 
 ```php
 $container->bind_contextual( Cache_Interface::class, array(
-    '$db_cache'   => fn( $r ) => new Redis_Cache(),
-    '$file_cache' => fn( $r ) => new File_Cache(),
-    ''            => fn( $r ) => new Redis_Cache(),  // Default
+    '$db_cache'   => Redis_Cache::class,
+    '$file_cache' => File_Cache::class,
+    'default'     => Redis_Cache::class,
 ) );
 ```
 
-**Throws:** `Container_Exception` (invalid class/interface, invalid key format, non-callable factory)
+**Throws:** `Container_Exception` (invalid class/interface, invalid key format, invalid class name)
 
 ### load_config(array $config): void
 
-Load service bindings from array. Accepts both simple factories and contextual binding arrays.
+Load service bindings from array. Accepts both simple class name bindings and contextual binding arrays.
 
 ```php
 $container->load_config( array(
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Logger_Interface::class => WP_Logger::class,
     Cache_Interface::class  => array(
-        '$db_cache' => fn( $r ) => new Redis_Cache(),
-        ''          => fn( $r ) => new File_Cache(),
+        '$db_cache' => Redis_Cache::class,
+        'default'   => File_Cache::class,
     ),
 ) );
 ```
@@ -132,7 +132,7 @@ Composition root - implement in your module. Called automatically by `boot()`.
 
 ## WPDI\Resolver
 
-Limited API wrapper for service resolution. Used by factory functions and `Scope::bootstrap()`.
+Limited API wrapper for service resolution. Used by `Scope::bootstrap()`.
 
 ### get(string $id): mixed
 
@@ -170,7 +170,7 @@ Base exception for all WPDI errors.
 
 Container errors (PSR-11 `ContainerExceptionInterface`).
 
-**Causes:** Invalid factory, circular dependencies, reflection errors.
+**Causes:** Invalid class name, circular dependencies, reflection errors.
 
 ### Not_Found_Exception
 
@@ -190,19 +190,19 @@ Circular constructor dependencies detected.
 
 ### wpdi-config.php
 
-Optional configuration in module root. Factories receive a `Resolver` for dependency resolution. Supports both simple bindings (single factory) and contextual bindings (array of factories keyed by `$param_name`).
+Optional configuration in module root. Maps interface names to concrete class names. Supports both simple bindings and contextual bindings (array keyed by `$param_name`).
 
 ```php
 <?php
 return array(
     // Simple binding: one implementation for all consumers
-    Logger_Interface::class => fn( $r ) => new WP_Logger(),
+    Logger_Interface::class => WP_Logger::class,
 
     // Contextual binding: different implementations based on parameter name
     Cache_Interface::class  => array(
-        '$db_cache'   => fn( $r ) => new Redis_Cache(),
-        '$file_cache' => fn( $r ) => new File_Cache(),
-        ''            => fn( $r ) => new Redis_Cache(),  // Default
+        '$db_cache'   => Redis_Cache::class,
+        '$file_cache' => File_Cache::class,
+        'default'     => Redis_Cache::class,
     ),
 );
 ```

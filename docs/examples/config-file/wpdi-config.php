@@ -2,7 +2,7 @@
 /**
  * WPDI Configuration
  *
- * Factory functions receive NO ARGUMENTS - they cannot access the container.
+ * Map interface names to concrete class names.
  * Only configure INTERFACE BINDINGS here.
  * Concrete classes are auto-discovered and autowired - keep this file minimal!
  */
@@ -11,16 +11,12 @@ return array(
 	/**
 	 * Interface binding: Bind interface to concrete implementation
 	 */
-	PaymentClientInterface::class => function () {
-		return new PayPal_Client();
-	},
+	PaymentClientInterface::class => PayPal_Client::class,
 
 	/**
 	 * Interface binding: Bind interface to concrete implementation
 	 */
-	LoggerInterface::class        => function () {
-		return new WP_Logger();
-	},
+	LoggerInterface::class        => WP_Logger::class,
 
 	/**
 	 * That's it! Keep this file minimal.

@@ -70,11 +70,11 @@ class Plugin_Integration_Test extends WP_UnitTestCase {
 
         // Override with test implementations (simple and contextual)
         $this->container->load_config( array(
-            Logger_Interface::class => fn( $r ) => new Test_Logger(),
-            API_Client::class       => fn( $r ) => new Mock_API_Client(),
+            Logger_Interface::class => Test_Logger::class,
+            API_Client::class       => Mock_API_Client::class,
             Cache_Interface::class  => array(
-                '$db_cache' => fn( $r ) => new Test_DB_Cache(),
-                ''          => fn( $r ) => new Test_File_Cache(),
+                '$db_cache' => Test_DB_Cache::class,
+                'default'   => Test_File_Cache::class,
             ),
         ) );
 
