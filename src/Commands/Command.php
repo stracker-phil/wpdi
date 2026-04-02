@@ -70,6 +70,52 @@ abstract class Command {
 		WP_CLI::error( $message );
 	}
 
+	protected function results_found( array $results, string $one_result, string $n_results, string $no_results ): void {
+		$number = count( $results );
+
+		switch ( $number ) {
+			case 0:
+				$message = $no_results;
+				break;
+			case 1:
+				$message = $one_result;
+				break;
+			default:
+				$message = $n_results;
+				break;
+		}
+
+		if ( $message ) {
+			$message = sprintf( $message, $number );
+			$this->log( WP_CLI::colorize( "%y-- $message --%n" ) );
+		}
+	}
+
+	protected function result_meta( array $details ): void {
+		$rows = 0;
+
+		foreach ( $details as $key => $value ) {
+			if ( ! $value ) {
+				continue;
+			}
+
+			switch ( $key ) {
+				case 'filter':
+					$label = 'Filter for';
+					break;
+				default:
+					continue 2;
+			}
+
+			$rows ++;
+			$this->log( WP_CLI::colorize( "$label: %8 $value %n" ) );
+		}
+
+		if ( $rows > 0 ) {
+			$this->log( '' );
+		}
+	}
+
 	/**
 	 * Get the short (unqualified) class name from a FQCN.
 	 *
@@ -279,7 +325,8 @@ abstract class Command {
 				$colored = isset( $types[ $field ] )
 					? $this->apply_cell_format( $types[ $field ], $raw, $item )
 					: $raw;
-				$cells[] = ' ' . $colored . str_repeat( ' ', $widths[ $field ] - mb_strlen( $raw, 'UTF-8' ) ) . ' ';
+				$cells[] =
+					' ' . $colored . str_repeat( ' ', $widths[ $field ] - mb_strlen( $raw, 'UTF-8' ) ) . ' ';
 			}
 			$this->log( $v . implode( $v, $cells ) . $v );
 		}
@@ -314,6 +361,7 @@ abstract class Command {
 					$fqcn   = str_replace( ' [CIRCULAR]', '', $fqcn );
 					$suffix = ' ' . WP_CLI::colorize( '%r[CIRCULAR]%n' );
 				}
+
 				return $this->format_class_name( $fqcn, (string) ( $item['type'] ?? '' ) ) . $suffix;
 			case 'class_name':
 				// $item['type'] must be the pre-normalized label ('class', 'interface', …).
@@ -328,11 +376,13 @@ abstract class Command {
 				}
 				$space = (int) strpos( $value, ' ' );
 				$color = 0 === strpos( $value, 'as ' ) ? '%g' : '%c';
+
 				return substr( $value, 0, $space + 1 ) . WP_CLI::colorize( $color . substr( $value, $space + 1 ) . '%n' );
 			case 'bool':
 				if ( 'no' === $value || 'false' === $value || '0' === $value ) {
 					return WP_CLI::colorize( '%r' . $value . '%n' );
 				}
+
 				return $value;
 		}
 
@@ -356,6 +406,7 @@ abstract class Command {
 		$type_color = $this->get_type_color( $type_label );
 		$file_path  = $this->get_class_file_path( $class_name, $base_path );
 
+		$this->log( '' );
 		$this->log( 'Path: ' . $file_path );
 		$this->log(
 			WP_CLI::colorize( $type_color . $type_label . '%n' )

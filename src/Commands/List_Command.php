@@ -92,8 +92,8 @@ class List_Command extends Command {
 		}
 
 		// Apply --filter substring match against class name.
-		if ( isset( $assoc_args['filter'] ) ) {
-			$filter = $assoc_args['filter'];
+		$filter = $assoc_args['filter'] ?? '';
+		if ( $filter ) {
 			$output = array_filter(
 				$output,
 				static fn( array $item ): bool => false !== strpos( $item['class'], $filter )
@@ -101,24 +101,24 @@ class List_Command extends Command {
 			$output = array_values( $output );
 		}
 
-		if ( empty( $output ) ) {
-			$this->log( "No services found in {$path}" );
-
-			return;
-		}
-
 		if ( in_array( $format, array( 'json', 'yaml', 'csv' ), true ) ) {
 			format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
 		} else {
-			$this->table(
-				$output,
-				array( 'class', 'type', 'autowirable', 'source' ),
-				array(
-					'class'       => 'class_name',
-					'type'        => 'type_label',
-					'autowirable' => 'bool',
-				)
-			);
+			$this->result_meta( [ 'filter' => $filter ] );
+
+			if ( $output ) {
+				$this->table(
+					$output,
+					array( 'class', 'type', 'autowirable', 'source' ),
+					array(
+						'class'       => 'class_name',
+						'type'        => 'type_label',
+						'autowirable' => 'bool',
+					)
+				);
+			}
+
+			$this->results_found( $output, '1 entry', '%d entries', 'no results' );
 		}
 	}
 }

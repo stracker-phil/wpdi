@@ -75,12 +75,11 @@ class Inspect_Command extends Command {
 		// Build and display tree.
 		$rows = array();
 		$this->collect_tree_rows( $class_name, 0, array(), $rows, '', 0, $max_depth );
-		// Skip the root row — the class identity is already shown by log_class_header.
-		$this->render_tree( array_slice( $rows, 1 ) );
 
-		if ( count( $rows ) <= 1 ) {
-			$this->log( WP_CLI::colorize( '%y-- no dependencies --%n' ) );
-		}
+		// Skip the root row — the class identity is already shown by log_class_header.
+		$rows = array_slice( $rows, 1 );
+		$this->render_tree( $rows );
+		$this->results_found( $rows, '1 dependency', '%d dependencies', 'no dependencies'  );
 	}
 
 	/**

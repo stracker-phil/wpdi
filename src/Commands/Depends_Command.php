@@ -62,34 +62,32 @@ class Depends_Command extends Command {
 		$this->log_class_header( $class_name, $type, $path );
 
 		$dependents = $this->find_dependents( $class_name, $path, $autowiring_paths );
+		$rows       = array();
 
-		if ( empty( $dependents ) ) {
-			$this->log( WP_CLI::colorize( '%y-- no dependents found --%n' ) );
+		if ( $dependents ) {
+			$config = $this->load_config( $path );
+			foreach ( $dependents as $entry ) {
+				$rows[] = array(
+					'type'           => $this->format_type_label( $entry['type'] ),
+					'class'          => $entry['fqcn'],
+					'param'          => $entry['param'],
+					'config mapping' => $this->build_config_mapping_label( $class_name, $entry, $config ),
+				);
+			}
 
-			return;
-		}
-
-		$config = $this->load_config( $path );
-		$rows   = array();
-		foreach ( $dependents as $entry ) {
-			$rows[] = array(
-				'type'           => $this->format_type_label( $entry['type'] ),
-				'class'          => $entry['fqcn'],
-				'param'          => $entry['param'],
-				'config mapping' => $this->build_config_mapping_label( $class_name, $entry, $config ),
+			$this->table(
+				$rows,
+				array( 'type', 'class', 'param', 'config mapping' ),
+				array(
+					'type'           => 'type_label',
+					'class'          => 'class_name',
+					'param'          => 'param',
+					'config mapping' => 'via',
+				)
 			);
 		}
 
-		$this->table(
-			$rows,
-			array( 'type', 'class', 'param', 'config mapping' ),
-			array(
-				'type'           => 'type_label',
-				'class'          => 'class_name',
-				'param'          => 'param',
-				'config mapping' => 'via',
-			)
-		);
+		$this->results_found( $rows, '1 usage', '%d usages', 'no usages' );
 	}
 
 	/**
