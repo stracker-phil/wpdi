@@ -4,7 +4,12 @@ declare( strict_types = 1 );
 
 namespace WPDI;
 
+use WP_CLI;
 use WPDI\Commands\Cli;
+use WPDI\Exceptions\WPDI_Exception;
+use WPDI\Exceptions\Container_Exception;
+use WPDI\Exceptions\Circular_Dependency_Exception;
+use WPDI\Exceptions\Not_Found_Exception;
 
 require_once __DIR__ . '/version-check.php';
 
@@ -52,8 +57,18 @@ abstract class Scope {
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
 	 */
 	public static function boot( string $scope_file ): void {
-		if ( ! isset( self::$booted[ static::class ] ) ) {
+		if ( isset( self::$booted[ static::class ] ) ) {
+			return;
+		}
+
+		try {
 			self::$booted[ static::class ] = new static( $scope_file );
+		} catch ( WPDI_Exception $e ) {
+			if ( defined( 'WP_CLI' ) && WP_CLI ) {
+				WP_CLI::error( $e->getMessage() );
+			}
+
+			wp_die( $e->getMessage() );
 		}
 	}
 
@@ -100,6 +115,9 @@ abstract class Scope {
 	 * Initialize the module
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
+	 * @throws Container_Exception
+	 * @throws Circular_Dependency_Exception
+	 * @throws Not_Found_Exception
 	 */
 	protected function __construct( string $scope_file ) {
 		/*
