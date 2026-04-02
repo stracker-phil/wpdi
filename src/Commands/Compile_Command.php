@@ -61,8 +61,6 @@ class Compile_Command extends Command {
 			return;
 		}
 
-		$this->log( 'Discovering classes:' );
-
 		$discovery = new Auto_Discovery();
 		$classes   = array();
 
@@ -93,24 +91,21 @@ class Compile_Command extends Command {
 					'type'  => 'type_label',
 					'class' => 'class_name',
 				),
-				$autowiring_path
+				"/$autowiring_path"
 			);
 		}
 
+		$this->results_found( $classes, 'discovered 1 class', 'discovered %d classes', 'no classes found to compile' );
 		if ( empty( $classes ) ) {
-			$this->warning( 'No classes found to compile.' );
-
 			return;
 		}
-
-		$this->log( 'Found ' . count( $classes ) . ' classes.' );
+		$this->log( '' );
 
 		// Check for manual configuration
 		$config_file    = $path . '/wpdi-config.php';
 		$config         = array();
 		$manual_configs = array();
 		if ( file_exists( $config_file ) ) {
-			$this->log( 'Loading configuration from wpdi-config.php...' );
 			$config         = require $config_file;
 			$manual_configs = array_keys( $config );
 
@@ -129,20 +124,14 @@ class Compile_Command extends Command {
 					'type'  => 'type_label',
 					'class' => 'class_name',
 				),
-				'wpdi-config.php'
+				'/wpdi-config.php'
 			);
 		}
-
-		$this->log( 'Compiling container cache...' );
+		$this->results_found( $manual_configs, 'found 1 manual config', 'found %d manual configs', '' );
+		$this->log( '' );
 
 		if ( $compiler->write( $classes, $config ) ) {
-			$this->success( 'Container compiled successfully to ' . $compiler->get_cache_file() );
-
-			// Show statistics
-			$this->log( 'Total discovered classes: ' . count( $classes ) );
-			if ( ! empty( $manual_configs ) ) {
-				$this->log( 'Manual configurations: ' . count( $manual_configs ) );
-			}
+			$this->success( 'Container compiled to: ' . $compiler->get_cache_file() );
 		} else {
 			$this->error( 'Failed to compile container cache' );
 		}
