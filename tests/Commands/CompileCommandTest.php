@@ -90,7 +90,7 @@ class CompileCommandTest extends TestCase {
 		// Verify success message was called
 		$success_calls = $this->getWpCliCalls( 'success' );
 		$this->assertCount( 1, $success_calls, 'Should show success message' );
-		$this->assertStringContainsString( 'compiled successfully', $success_calls[0]['args'][0] );
+		$this->assertStringContainsString( 'Container compiled to', $success_calls[0]['args'][0] );
 	}
 
 	/**
@@ -197,10 +197,10 @@ class CompileCommandTest extends TestCase {
 			array( 'dir' => $this->temp_dir )
 		);
 
-		// Verify warning was shown
-		$warning_calls = $this->getWpCliCalls( 'warning' );
-		$this->assertCount( 1, $warning_calls );
-		$this->assertStringContainsString( 'No classes found', $warning_calls[0]['args'][0] );
+		// Verify the "no classes" message was logged
+		$log_calls    = $this->getWpCliCalls( 'log' );
+		$log_messages = implode( "\n", array_column( array_column( $log_calls, 'args' ), 0 ) );
+		$this->assertStringContainsString( 'no classes found', $log_messages );
 
 		// Verify no cache file was created
 		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
@@ -218,12 +218,12 @@ class CompileCommandTest extends TestCase {
 		$this->createTestClass( 'Service_Two' );
 		$this->createTestClass( 'Service_Three' );
 
-		// Create config file
+		// Create config file with valid static class name mappings
 		$config_content = <<<'PHP'
 <?php
 return array(
-	'Logger_Interface' => function() { return new ArrayLogger(); },
-	'Config_Interface' => function() { return new ArrayConfig(); },
+	'Logger_Interface' => 'Array_Logger',
+	'Config_Interface' => 'Array_Config',
 );
 PHP;
 		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config_content );
@@ -243,18 +243,47 @@ PHP;
 		$this->assertStringContainsString( 'Service_One', $all_logs, 'Should log Service_One' );
 		$this->assertStringContainsString( 'Service_Two', $all_logs, 'Should log Service_Two' );
 		$this->assertStringContainsString( 'Service_Three', $all_logs, 'Should log Service_Three' );
-		$this->assertStringContainsString( 'Found 3 classes', $all_logs, 'Should show class count' );
+		$this->assertStringContainsString( 'discovered 3 classes', $all_logs, 'Should show class count' );
 
-		// Verify configuration loading
-		$this->assertStringContainsString( 'Loading configuration from wpdi-config.php', $all_logs, 'Should log config loading' );
-		$this->assertStringContainsString( 'Manual configurations: 2', $all_logs, 'Should show config count' );
+		// Verify config entries are listed
 		$this->assertStringContainsString( 'Logger_Interface', $all_logs, 'Should list Logger_Interface' );
 		$this->assertStringContainsString( 'Config_Interface', $all_logs, 'Should list Config_Interface' );
+		$this->assertStringContainsString( 'found 2 manual configs', $all_logs, 'Should show config count' );
+	}
 
-		// Verify progress messages appear in order
-		$this->assertStringContainsString( 'Discovering classes', $log_messages[0], 'First message should be discovery' );
-		$this->assertStringContainsString( 'Compiling container cache', $all_logs, 'Should show compilation step' );
-		$this->assertStringContainsString( 'Total discovered classes', $all_logs, 'Should show summary' );
+	/**
+	 * GIVEN a wpdi-config.php that contains a closure as a binding value
+	 * WHEN compiling
+	 * THEN should error with a message identifying the offending key
+	 */
+	public function test_rejects_closure_binding_in_config(): void {
+		$this->createTestClass( 'Test_Service' );
+
+		$config_content = <<<'PHP'
+<?php
+return array(
+	'Logger_Interface' => function() { return new stdClass(); },
+);
+PHP;
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config_content );
+
+		$command = new Compile_Command();
+
+		$this->expectException( 'WP_CLI_Exception' );
+
+		try {
+			$command->__invoke(
+				array(),
+				array( 'dir' => $this->temp_dir )
+			);
+		} catch ( WP_CLI_Exception $e ) {
+			$error_calls = $this->getWpCliCalls( 'error' );
+			$this->assertCount( 1, $error_calls );
+			$this->assertStringContainsString( 'Logger_Interface', $error_calls[0]['args'][0] );
+			$this->assertStringContainsString( 'wpdi-config.php', $error_calls[0]['args'][0] );
+
+			throw $e;
+		}
 	}
 
 	/**

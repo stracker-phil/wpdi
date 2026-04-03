@@ -109,22 +109,71 @@ class Compile_Command extends Command {
 			$config         = require $config_file;
 			$manual_configs = array_keys( $config );
 
-			$rows = array();
-			foreach ( $manual_configs as $config_class ) {
-				$rows[] = array(
-					'type'  => $this->format_type_label( $this->inspector->get_type( $config_class ) ),
-					'class' => $config_class,
-				);
+			// Validate: only string class names and contextual arrays are allowed.
+			foreach ( $config as $interface => $value ) {
+				if ( is_string( $value ) ) {
+					continue;
+				}
+				if ( is_array( $value ) ) {
+					foreach ( $value as $param => $concrete ) {
+						if ( ! is_string( $concrete ) ) {
+							$this->error( "Invalid binding for '{$interface}[\"{$param}\"]' in wpdi-config.php: only class name strings are allowed." );
+						}
+					}
+					continue;
+				}
+				$type = gettype( $value );
+				$this->error( "Invalid binding for '{$interface}' in wpdi-config.php: expected a class name string, got {$type}." );
+			}
+
+			$rows       = array();
+			$separators = array();
+
+			foreach ( $config as $interface => $value ) {
+				$interface_type = $this->format_type_label( $this->inspector->get_type( $interface ) );
+
+				if ( is_array( $value ) ) {
+					// Contextual binding: one row per param entry.
+					$first = true;
+					foreach ( $value as $param => $concrete ) {
+						if ( $first && count( $rows ) > 0 ) {
+							$separators[] = count( $rows );
+						}
+						$rows[] = array(
+							'type'         => $interface_type,
+							'class'        => $interface,
+							'param'        => $param,
+							'binding_type' => $this->format_type_label( $this->inspector->get_type( $concrete ) ),
+							'binding'      => $concrete,
+						);
+						$first  = false;
+					}
+				} else {
+					// Simple binding: single row.
+					if ( count( $rows ) > 0 ) {
+						$separators[] = count( $rows );
+					}
+					$rows[] = array(
+						'type'         => $interface_type,
+						'class'        => $interface,
+						'param'        => '',
+						'binding_type' => $this->format_type_label( $this->inspector->get_type( $value ) ),
+						'binding'      => $value,
+					);
+				}
 			}
 
 			$this->table(
 				$rows,
-				array( 'type', 'class' ),
+				array( 'type', 'class', 'param', 'binding' ),
 				array(
-					'type'  => 'type_label',
-					'class' => 'class_name',
+					'type'    => 'type_label',
+					'class'   => 'class_name',
+					'param'   => 'param',
+					'binding' => 'class_binding',
 				),
-				'/wpdi-config.php'
+				'/wpdi-config.php',
+				$separators
 			);
 		}
 		$this->results_found( $manual_configs, 'found 1 manual config', 'found %d manual configs', '' );

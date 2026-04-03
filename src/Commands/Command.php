@@ -363,6 +363,9 @@ abstract class Command {
 				}
 
 				return $this->format_class_name( $fqcn, (string) ( $item['type'] ?? '' ) ) . $suffix;
+			case 'class_binding':
+				// Like 'class_name' but colors the binding target using $item['binding_type'].
+				return $this->format_class_name( $value, (string) ( $item['binding_type'] ?? '' ) );
 			case 'class_name':
 				// $item['type'] must be the pre-normalized label ('class', 'interface', …).
 				return $this->format_class_name( $value, (string) ( $item['type'] ?? '' ) );
