@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/stracker-phil/wpdi)
+
 # WPDI - WordPress Dependency Injection
 
 Lightweight, WordPress-native dependency injection with auto-discovery and zero configuration.
@@ -62,6 +64,7 @@ For interface bindings or classes outside `src/` (e.g., Composer packages), crea
 
 ```php
 <?php
+// Very basic example. Read the "Configuration" doc for more options.
 return array(
     Logger_Interface::class => WP_Logger:class,
     Cache_Interface::class  => Redis_Cache::class,
@@ -84,6 +87,8 @@ wp di compile
 - WordPress 5.0+
 
 ## Documentation
+
+> **Tip:** Use DeepWiki to explore the codebase using AI - https://deepwiki.com/stracker-phil/wpdi
 
 - [Getting Started](docs/getting-started.md)
 - [Configuration](docs/configuration.md)

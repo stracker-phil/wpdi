@@ -81,12 +81,32 @@ The original decision stated factory values are opaque. This was subsequently re
 
 1. Indirect match (`via` set) → `via InterfaceName`
 2. `$config[DependentClass]['$param']` → `as ConcreteClass` (per-dependent contextual)
-3. `$config[TargetInterface]['$param']` → `as ConcreteClass` (interface-keyed param array)
+3. `$config[TargetInterface]['$param']` or `['default']` → `as ConcreteClass` (interface-keyed contextual, with `'default'` fallback matching Container resolution order)
 4. `$config[TargetInterface]` as a non-array value → `as ConcreteClass` (simple global binding)
 5. No binding found → `-`
 
 Config values are static class name strings (see ADR-013). The command reads each binding
 value directly as a FQCN to resolve the `as ConcreteClass` label.
 
-This means `wp di depends RandomizerInterface` correctly shows `as Randomizer` for all
-consumers when the config has `RandomizerInterface::class => ['$randomizer' => Randomizer::class]`.
+## Amendment: Contextual-Aware Via Filtering
+
+The original decision included all consumers of a config-bound interface in the `depends Concrete`
+results (with `via InterfaceName`). This was incorrect when the config entry is a contextual
+array binding: a consumer whose param resolves to a *different* concrete should not appear as a
+dependent of the target.
+
+`find_dependents` now calls `binding_resolves_to($binding, $param_name, $target_fqcn)` before
+accepting a via match. The helper mirrors Container resolution order:
+
+- **Simple binding** (`Interface => Concrete`): every param resolves to that concrete.
+- **Contextual binding** (`Interface => ['$param' => ClassA, 'default' => ClassB]`): the
+  specific param key is checked first; if absent, the `'default'` key is used. A consumer
+  whose param resolves to a *different* class is excluded from results.
+
+This fixes the case where `wp di depends Randomizer` with config
+`RandomizerInterface => ['$forty_two' => FortyTwo, 'default' => Randomizer]` previously showed
+`FateEngine` (which injects `$forty_two` → `FortyTwo`) as a dependent of `Randomizer`.
+
+The previous consequence "which branch actually runs is not shown" is no longer accurate —
+the command now correctly reflects per-param resolution for both the `via` inclusion check
+and the `as ConcreteClass` label.

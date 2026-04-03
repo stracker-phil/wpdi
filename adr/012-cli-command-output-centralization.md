@@ -57,14 +57,15 @@ methods to produce output. Changing a rendering method in `Command` affects all 
 `table()` accepts a `$types` map of `field => format_identifier`. Format identifiers are strings,
 not callables. `apply_cell_format()` dispatches on them:
 
-| Identifier    | Behaviour |
-|---------------|-----------|
-| `class_name`  | Colorizes FQCN leaf by type (reads `$item['type']`) |
-| `class_fqcn`  | Like `class_name` but also detects and colors `[CIRCULAR]` in red |
-| `type_label`  | Colors a normalized type label with its type color |
-| `via`         | Colors the class/short-name portion in a `via Name` or `as Name` string cyan |
-| `bool`        | Colors false-like values (`no`, `false`, `0`) red |
-| `param`       | Colors every `$word` token in the cell yellow |
+| Identifier      | Behaviour |
+|-----------------|-----------|
+| `class_name`    | Colorizes FQCN leaf by type (reads `$item['type']`) |
+| `class_fqcn`    | Like `class_name` but also detects and colors `[CIRCULAR]` in red |
+| `class_binding` | Like `class_name` but reads `$item['binding_type']` — used where a row has two distinct class columns each with their own type (e.g. the `binding` column in `compile`) |
+| `type_label`    | Colors a normalized type label with its type color |
+| `via`           | Colors the class/short-name portion in a `via Name` or `as Name` string cyan |
+| `bool`          | Colors false-like values (`no`, `false`, `0`) red |
+| `param`         | Colors every `$word` token in the cell yellow |
 
 Type values stored in rows must be pre-normalized labels (`'class'`, not `'concrete'`) before
 being passed to `table()`, so that `class_name` and `type_label` formats receive consistent input.

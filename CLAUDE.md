@@ -87,10 +87,11 @@ adr/                     # Architectural Decision Records
 - `Cache_Manager::get_cache(string $scope_file, array $config_bindings = [])` — threads bindings through all write paths
 - Update `Compiler`, `Cache_Manager`, and `Container::load_compiled()` together
 - Ensure `var_export()` output is valid PHP 7.4+; config values must be class name strings (not closures)
+- `Compile_Command` validates `wpdi-config.php` on load: top-level values must be strings or arrays; array values must be strings; anything else (closure, object, etc.) calls `$this->error()` and aborts
 
 **WP-CLI command changes:**
 - All commands extend `Command` (abstract base class in `src/Commands/Command.php`); commands only collect data and call parent rendering methods
-- Output uses `$this->table($items, $fields, $types, $title, $separators)` — column widths use `mb_strlen()` for multi-byte safety; `$types` maps field names to string format identifiers (`'class_name'`, `'class_fqcn'`, `'type_label'`, `'via'`, `'bool'`, `'param'`); `$title` adds a full-width spanning row above column headers; `$separators` is an array of row indices before which a mid-border line is emitted
+- Output uses `$this->table($items, $fields, $types, $title, $separators)` — column widths use `mb_strlen()` for multi-byte safety; `$types` maps field names to string format identifiers (`'class_name'`, `'class_fqcn'`, `'class_binding'`, `'type_label'`, `'via'`, `'bool'`, `'param'`); use `'class_binding'` when a row has two distinct class columns (reads `$item['binding_type']` instead of `$item['type']`); `$title` adds a full-width spanning row above column headers; `$separators` is an array of row indices before which a mid-border line is emitted
 - Type values stored in table rows must be pre-normalized labels (`'class'` not `'concrete'`) via `$this->format_type_label()` before passing to `table()`
 - Adding a new format identifier requires editing `apply_cell_format()` in `Command.php`
 - `render_tree()` in `Command` reshapes tree rows into a table; depth-1 nodes strip their tree connector and are preceded by a mid-border separator; depth-2+ nodes collapse the depth-1 continuation to 1 space (giving 2-space left margin total)
