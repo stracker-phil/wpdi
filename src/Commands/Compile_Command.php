@@ -156,7 +156,7 @@ class Compile_Command extends Command {
 					$rows[] = array(
 						'type'         => $interface_type,
 						'class'        => $interface,
-						'param'        => '',
+						'param'        => 'default',
 						'binding_type' => $this->format_type_label( $this->inspector->get_type( $value ) ),
 						'binding'      => $value,
 					);
