@@ -41,21 +41,22 @@ wp di list [--dir=<dir>] [--autowiring-paths=<paths>] [--filter=<filter>] [--for
 | Column        | Description                                                                                |
 |---------------|--------------------------------------------------------------------------------------------|
 | `class`       | Fully-qualified class or interface name                                                    |
-| `type`        | `concrete`, `interface`, `abstract`, or `unknown`                                          |
+| `type`        | `class`, `interface`, `abstract`, or `unknown`                                             |
 | `autowirable` | `yes` = can be instantiated automatically; `no` = requires factory (interfaces, abstracts) |
 | `source`      | `src` = auto-discovered from `src/`; `config` = defined in `wpdi-config.php`               |
 
 **Example:**
 
 ```
-+-------------------+----------+-------------+--------+
-| class             | type     | autowirable | source |
-+-------------------+----------+-------------+--------+
-| Payment_Processor | concrete | yes         | src    |
-| Payment_Config    | concrete | yes         | src    |
-| Logger_Interface  | interface| no          | config |
-| Cache_Interface   | interface| no          | config |
-+-------------------+----------+-------------+--------+
+┌──────────────────────────────────────────────┬───────────┬─────────────┬────────┐
+│ class                                        │ type      │ autowirable │ source │
+├──────────────────────────────────────────────┼───────────┼─────────────┼────────┤
+│ MyPlugin\Services\Payment_Processor          │ class     │ yes         │ src    │
+│ MyPlugin\Services\Payment_Config             │ class     │ yes         │ src    │
+│ MyPlugin\Contracts\Logger_Interface          │ interface │ no          │ config │
+│ MyPlugin\Contracts\Cache_Interface           │ interface │ no          │ config │
+└──────────────────────────────────────────────┴───────────┴─────────────┴────────┘
+-- 4 entries --
 ```
 
 ## wp di compile
@@ -77,18 +78,29 @@ wp di compile [--dir=<dir>] [--autowiring-paths=<paths>] [--force]
 **Example:**
 
 ```
-Discovering classes in /path/to/plugin/src...
-Found 3 classes:
-  - Payment_Processor
-  - Payment_Config
-  - Order_Handler
-Loading configuration from wpdi-config.php...
-Compiling container cache...
-Success: Container compiled successfully to cache/wpdi-container.php
-Total discovered classes: 3
-Manual configurations: 2
-  - Logger_Interface
-  - Cache_Interface
+┌─────────────────────────────────────────────────────┐
+│ /src                                                │
+├───────┬─────────────────────────────────────────────┤
+│ type  │ class                                       │
+├───────┼─────────────────────────────────────────────┤
+│ class │ MyPlugin\Services\Payment_Processor         │
+│ class │ MyPlugin\Services\Payment_Config            │
+│ class │ MyPlugin\Services\Order_Handler             │
+└───────┴─────────────────────────────────────────────┘
+-- discovered 3 classes --
+
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│ /wpdi-config.php                                                                          │
+├───────────┬──────────────────────────────────────┬─────────┬──────────────────────────────┤
+│ type      │ class                                │ param   │ binding                      │
+├───────────┼──────────────────────────────────────┼─────────┼──────────────────────────────┤
+│ interface │ MyPlugin\Contracts\Logger_Interface  │ default │ MyPlugin\Services\Logger     │
+├───────────┼──────────────────────────────────────┼─────────┼──────────────────────────────┤
+│ interface │ MyPlugin\Contracts\Cache_Interface   │ default │ MyPlugin\Services\Redis_Cache│
+└───────────┴──────────────────────────────────────┴─────────┴──────────────────────────────┘
+-- found 2 manual configs --
+
+Success: Container compiled to: cache/wpdi-container.php
 ```
 
 ## wp di inspect
@@ -116,19 +128,25 @@ Short class names are resolved automatically by scanning the autodiscovery paths
 ```
 $ wp di inspect Payment_Gateway
 
-Path: src/Payment_Gateway.php
+Path: src/Services/Payment_Gateway.php
+class MyPlugin\Services\Payment_Gateway
 
-Payment_Gateway    class        MyPlugin\Services
-├── $validator     class        MyPlugin\Services\Payment_Validator
-│   └── $logger    interface    MyPlugin\Contracts\Logger_Interface
-└── $config        class        MyPlugin\Services\Payment_Config
+┌──────────────────┬───────────┬──────────────────────────────────────────────────┐
+│ param            │ type      │ class                                            │
+├──────────────────┼───────────┼──────────────────────────────────────────────────┤
+│ $validator       │ class     │ MyPlugin\Services\Payment_Validator              │
+│  └── $logger     │ interface │ MyPlugin\Contracts\Logger_Interface              │
+├──────────────────┼───────────┼──────────────────────────────────────────────────┤
+│ $config          │ class     │ MyPlugin\Services\Payment_Config                 │
+└──────────────────┴───────────┴──────────────────────────────────────────────────┘
+-- 3 dependencies --
 ```
 
 The output shows:
-- **File path** of the inspected class
-- **Dependency tree** with parameter names, types, and namespaces
+- **File path** of the inspected class and its type + fully-qualified name
+- **Dependency table** with parameter names, types, and FQCNs; nested dependencies are indented under their parent
 - **Warnings** for unbound interfaces or abstract classes
-- **Circular dependency** markers when detected
+- **[CIRCULAR]** marker on any dependency that creates a cycle
 
 ## wp di depends
 
@@ -156,18 +174,24 @@ Short names are resolved by scanning discovered classes and their dependency FQC
 ```
 $ wp di depends Logger_Interface
 
-Dependents of Logger_Interface (MyPlugin\Contracts):
+Path: src/Contracts/Logger_Interface.php
+interface MyPlugin\Contracts\Logger_Interface
 
-Payment_Gateway    class    $logger    MyPlugin\Services
-Order_Handler      class    $logger    MyPlugin\Services
-Auth_Service       class    $log       MyPlugin\Services\Auth
+┌───────────┬────────────────────────────────────────┬─────────┬────────────────┐
+│ type      │ class                                  │ param   │ config mapping │
+├───────────┼────────────────────────────────────────┼─────────┼────────────────┤
+│ class     │ MyPlugin\Services\Payment_Gateway      │ $logger │ as File_Logger │
+│ class     │ MyPlugin\Services\Order_Handler        │ $logger │ as File_Logger │
+│ class     │ MyPlugin\Services\Auth_Service         │ $log    │ as File_Logger │
+└───────────┴────────────────────────────────────────┴─────────┴────────────────┘
+-- 3 usages --
 ```
 
 Each row shows:
-- **Class name** of the dependent
-- **Type** (`class`, `interface`, `abstract`)
-- **Parameter name** through which the dependency is injected
-- **Namespace** of the dependent
+- **type** — `class`, `interface`, or `abstract`
+- **class** — fully-qualified name of the dependent
+- **param** — constructor parameter name through which the dependency is injected
+- **config mapping** — how the dependency is resolved: `as ConcreteClass` (bound in `wpdi-config.php`), `via InterfaceName` (injected via a config-bound interface), or `-` (no binding)
 
 ## wp di clear
 
