@@ -82,7 +82,7 @@ class DependsCommandTest extends TestCase {
 	/**
 	 * GIVEN a fully-qualified class name that does not exist in any loaded class
 	 * WHEN finding dependents
-	 * THEN should show "no dependents found" (FQCN is used as-is, not resolved as a short name)
+	 * THEN should show "no usages" (FQCN is used as-is, not resolved as a short name)
 	 */
 	public function test_shows_no_dependents_for_nonexistent_fqcn(): void {
 		$command = new Depends_Command();
@@ -93,7 +93,7 @@ class DependsCommandTest extends TestCase {
 		);
 
 		$output = $this->getLogOutput();
-		$this->assertStringContainsString( 'no dependents found', $output );
+		$this->assertStringContainsString( 'no usages', $output );
 	}
 
 	/**
@@ -119,13 +119,13 @@ class DependsCommandTest extends TestCase {
 
 		$this->assertStringContainsString( $consumer_name, $output );
 		$this->assertStringContainsString( '$service', $output );
-		$this->assertStringNotContainsString( 'no dependents found', $output );
+		$this->assertStringNotContainsString( 'no usages', $output );
 	}
 
 	/**
 	 * GIVEN a target class with no dependents in the scan paths
 	 * WHEN finding dependents
-	 * THEN should show "no dependents found" message
+	 * THEN should show "no usages" message
 	 */
 	public function test_shows_no_dependents_when_nothing_found(): void {
 		$command = new Depends_Command();
@@ -138,7 +138,7 @@ class DependsCommandTest extends TestCase {
 		$output = $this->getLogOutput();
 
 		$this->assertStringContainsString( 'SimpleClass', $output );
-		$this->assertStringContainsString( 'no dependents found', $output );
+		$this->assertStringContainsString( 'no usages', $output );
 	}
 
 	/**
@@ -162,7 +162,7 @@ class DependsCommandTest extends TestCase {
 		$this->assertStringContainsString( $dep_class, $output );
 		$this->assertStringContainsString( '$dep', $output );
 		$this->assertStringContainsString( 'class', $output );
-		$this->assertStringNotContainsString( 'no dependents found', $output );
+		$this->assertStringNotContainsString( 'no usages', $output );
 	}
 
 	/**
@@ -387,7 +387,7 @@ class DependsCommandTest extends TestCase {
 		$this->assertStringContainsString( $consumer, $output );
 		$this->assertStringContainsString( '$cache', $output );
 		$this->assertStringContainsString( 'via CacheInterface', $output );
-		$this->assertStringNotContainsString( 'no dependents found', $output );
+		$this->assertStringNotContainsString( 'no usages', $output );
 	}
 
 	/**
@@ -410,7 +410,7 @@ class DependsCommandTest extends TestCase {
 		$output = $this->getLogOutput();
 
 		$this->assertStringNotContainsString( $consumer, $output );
-		$this->assertStringContainsString( 'no dependents found', $output );
+		$this->assertStringContainsString( 'no usages', $output );
 	}
 
 	/**
@@ -512,6 +512,72 @@ class DependsCommandTest extends TestCase {
 
 		$this->assertStringContainsString( $consumer, $output );
 		$this->assertStringContainsString( 'as DB_Cache', $output );
+	}
+
+	/**
+	 * GIVEN an interface with a contextual binding where one consumer's param matches a specific
+	 * key and another's param falls back to 'default'
+	 * WHEN finding dependents of the interface
+	 * THEN the specific consumer shows its specific class and the fallback consumer shows the default
+	 */
+	public function test_contextual_binding_default_fallback_shown_for_unmatched_param(): void {
+		$specific_consumer = 'Specific_Param_Consumer_' . uniqid();
+		$default_consumer  = 'Default_Param_Consumer_' . uniqid();
+
+		// $specific_param maps to DB_Cache; anything else falls back to default (Null_Cache).
+		$this->createClassWithDependency( $specific_consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+		$this->createClassWithDependency( $default_consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'storage' );
+
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => [ '\$cache' => \\WPDI\\Tests\\Fixtures\\DB_Cache::class, 'default' => \\WPDI\\Tests\\Fixtures\\Null_Cache::class ] ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\CacheInterface' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		// Specific-param consumer resolves to DB_Cache.
+		$this->assertStringContainsString( $specific_consumer, $output );
+		$this->assertStringContainsString( 'as DB_Cache', $output );
+
+		// Default-fallback consumer resolves to Null_Cache.
+		$this->assertStringContainsString( $default_consumer, $output );
+		$this->assertStringContainsString( 'as Null_Cache', $output );
+	}
+
+	/**
+	 * GIVEN a contextual binding where one param maps to ClassA and another falls back to ClassB
+	 * WHEN finding dependents of ClassB (the default)
+	 * THEN only consumers whose param resolves to ClassB are included; ClassA consumers are excluded
+	 */
+	public function test_contextual_binding_excludes_consumers_resolving_to_different_class(): void {
+		$default_consumer  = 'Default_Consumer_' . uniqid();
+		$specific_consumer = 'Specific_Consumer_' . uniqid();
+
+		// $cache → DB_Cache (specific); $storage → Null_Cache (default).
+		$this->createClassWithDependency( $default_consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'storage' );
+		$this->createClassWithDependency( $specific_consumer, 'WPDI\\Tests\\Fixtures\\CacheInterface', 'cache' );
+
+		$config = "<?php\nreturn [ \\WPDI\\Tests\\Fixtures\\CacheInterface::class => [ '\$cache' => \\WPDI\\Tests\\Fixtures\\DB_Cache::class, 'default' => \\WPDI\\Tests\\Fixtures\\Null_Cache::class ] ];";
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\Null_Cache' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+
+		// $storage falls back to Null_Cache → included.
+		$this->assertStringContainsString( $default_consumer, $output );
+		$this->assertStringContainsString( 'via CacheInterface', $output );
+
+		// $cache resolves to DB_Cache, not Null_Cache → excluded.
+		$this->assertStringNotContainsString( $specific_consumer, $output );
 	}
 
 	/**

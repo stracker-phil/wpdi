@@ -61,11 +61,11 @@ class Depends_Command extends Command {
 		$type = $this->inspector->get_type( $class_name );
 		$this->log_class_header( $class_name, $type, $path );
 
-		$dependents = $this->find_dependents( $class_name, $path, $autowiring_paths );
+		$config     = $this->load_config( $path );
+		$dependents = $this->find_dependents( $class_name, $path, $autowiring_paths, $config );
 		$rows       = array();
 
 		if ( $dependents ) {
-			$config = $this->load_config( $path );
 			foreach ( $dependents as $entry ) {
 				$rows[] = array(
 					'type'           => $this->format_type_label( $entry['type'] ),
@@ -95,14 +95,17 @@ class Depends_Command extends Command {
 	 *
 	 * Also finds classes that inject an interface the target implements when that
 	 * interface is bound in wpdi-config.php (i.e. the target is the runtime implementation).
+	 * For contextual bindings, only includes a consumer if its specific param (or the
+	 * 'default' fallback) actually resolves to the target — not to a different concrete class.
 	 *
 	 * @param string $target_fqcn      Fully-qualified target class/interface name.
 	 * @param string $path             Module base path.
 	 * @param array  $autowiring_paths Autowiring paths.
+	 * @param array  $config           Loaded wpdi-config.php array.
 	 * @return array List of dependent entries: {fqcn, param, type, via}.
 	 */
-	private function find_dependents( string $target_fqcn, string $path, array $autowiring_paths ): array {
-		$via_interfaces = $this->get_config_bound_interfaces( $target_fqcn, $path );
+	private function find_dependents( string $target_fqcn, string $path, array $autowiring_paths, array $config ): array {
+		$via_interfaces = $this->get_config_bound_interfaces( $target_fqcn, $config );
 		$discovery      = new Auto_Discovery();
 		$dependents     = array();
 
@@ -130,6 +133,11 @@ class Depends_Command extends Command {
 					}
 
 					if ( null === $via_match && in_array( $dep_fqcn, $via_interfaces, true ) ) {
+						// For contextual bindings, verify this param actually resolves to
+						// the target — a different contextual branch should not be included.
+						if ( ! $this->binding_resolves_to( $config[ $dep_fqcn ], $param_name, $target_fqcn ) ) {
+							continue;
+						}
 						$via_match = array(
 							'fqcn'  => $fqcn,
 							'param' => $param_name,
@@ -157,10 +165,10 @@ class Depends_Command extends Command {
 	 * Used to surface classes that depend on the target indirectly via a config-bound interface.
 	 *
 	 * @param string $target_fqcn Target class FQCN.
-	 * @param string $path        Module base path.
+	 * @param array  $config      Loaded wpdi-config.php array.
 	 * @return array Interface FQCNs.
 	 */
-	private function get_config_bound_interfaces( string $target_fqcn, string $path ): array {
+	private function get_config_bound_interfaces( string $target_fqcn, array $config ): array {
 		$reflection = $this->inspector->get_reflection( $target_fqcn );
 
 		if ( ! $reflection || ! $reflection->isInstantiable() ) {
@@ -173,9 +181,32 @@ class Depends_Command extends Command {
 			return array();
 		}
 
-		$config = $this->load_config( $path );
-
 		return array_values( array_intersect( $implemented, array_keys( $config ) ) );
+	}
+
+	/**
+	 * Check whether a config binding resolves to a given target class for a param name.
+	 *
+	 * For a simple string binding, every param resolves to that class.
+	 * For a contextual array binding, the specific param key is checked first;
+	 * if absent, the 'default' key is used as a fallback (matching Container resolution).
+	 *
+	 * @param mixed  $binding      Raw binding value from config (string or array).
+	 * @param string $param_name   Parameter name prefixed with '$'.
+	 * @param string $target_fqcn  FQCN to match against.
+	 * @return bool True when the binding resolves to the target for this param.
+	 */
+	private function binding_resolves_to( $binding, string $param_name, string $target_fqcn ): bool {
+		if ( is_string( $binding ) ) {
+			return $binding === $target_fqcn;
+		}
+
+		if ( is_array( $binding ) ) {
+			$resolved = $binding[ $param_name ] ?? $binding['default'] ?? null;
+			return $resolved === $target_fqcn;
+		}
+
+		return false;
 	}
 
 	/**
@@ -288,13 +319,11 @@ class Depends_Command extends Command {
 	 * Build the "config mapping" label for a single dependent entry.
 	 *
 	 * Binding lookup order (first match wins):
-	 *   1. Indirect match (entry has a 'via' interface)       → "via InterfaceName"
-	 *   2. $config[DependentClass]['$param']                  → "as ConcreteClass"
-	 *   3. $config[TargetInterface]['$param']                 → "as ConcreteClass"
-	 *   4. $config[TargetInterface] (simple non-array value)  → "as ConcreteClass"
-	 *   5. No binding found                                   → "-"
-	 *
-	 * Both string class names and typed closures (fn():Concrete => ...) are resolved.
+	 *   1. Indirect match (entry has a 'via' interface)                  → "via InterfaceName"
+	 *   2. $config[DependentClass]['$param']                             → "as ConcreteClass"
+	 *   3. $config[TargetInterface]['$param'] or ['default']             → "as ConcreteClass"
+	 *   4. $config[TargetInterface] (simple non-array value)             → "as ConcreteClass"
+	 *   5. No binding found                                              → "-"
 	 *
 	 * @param string $target_fqcn FQCN of the class/interface being depended on.
 	 * @param array  $entry       Dependent entry: {fqcn, param, type, via}.
@@ -309,9 +338,10 @@ class Depends_Command extends Command {
 		// Contextual binding keyed by dependent class: $config[Dependent]['$param'].
 		$binding = $config[ $entry['fqcn'] ][ $entry['param'] ] ?? null;
 
-		// Contextual binding keyed by target interface: $config[Interface]['$param'].
+		// Contextual binding keyed by target interface: $config[Interface]['$param'] or 'default'.
 		if ( null === $binding && is_array( $config[ $target_fqcn ] ?? null ) ) {
-			$binding = $config[ $target_fqcn ][ $entry['param'] ] ?? null;
+			$contextual = $config[ $target_fqcn ];
+			$binding    = $contextual[ $entry['param'] ] ?? $contextual['default'] ?? null;
 		}
 
 		// Simple global binding: $config[Interface] = ConcreteClass or closure.
