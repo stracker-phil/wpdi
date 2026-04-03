@@ -1,0 +1,17 @@
+# Exclude from dist packages (composer require)
+.claude/        export-ignore
+.ddev/          export-ignore
+.idea/          export-ignore
+adr/            export-ignore
+coverage/       export-ignore
+docs/           export-ignore
+tests/          export-ignore
+CLAUDE.md       export-ignore
+DEVELOPMENT.md  export-ignore
+composer.lock   export-ignore
+phpcs.xml       export-ignore
+phpunit.xml     export-ignore
+.editorconfig   export-ignore
+.gitattributes  export-ignore
+.gitignore      export-ignore
+.DS_Store       export-ignore
