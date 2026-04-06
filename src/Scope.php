@@ -1,4 +1,9 @@
 <?php
+/**
+ * Base class for WordPress modules using WPDI.
+ *
+ * @package WPDI
+ */
 
 declare( strict_types = 1 );
 
@@ -19,7 +24,7 @@ require_once __DIR__ . '/Exceptions/Not_Found_Exception.php';
 require_once __DIR__ . '/Exceptions/Circular_Dependency_Exception.php';
 require_once __DIR__ . '/Class_Inspector.php';
 require_once __DIR__ . '/Auto_Discovery.php';
-require_once __DIR__ . '/Compiler.php';
+require_once __DIR__ . '/Cache_Store.php';
 require_once __DIR__ . '/Cache_Manager.php';
 require_once __DIR__ . '/Resolver.php';
 require_once __DIR__ . '/Container.php';
@@ -36,7 +41,12 @@ require_once __DIR__ . '/Container.php';
 Cli::register_commands();
 
 /**
- * Base class for WordPress modules using WPDI (plugins, themes, etc.)
+ * Base class for WordPress modules using WPDI (plugins, themes, etc.).
+ *
+ * Composition Root pattern: each module subclasses Scope, and its bootstrap()
+ * method is the single place where service location occurs. After bootstrap(),
+ * the container is discarded -- services communicate purely through
+ * constructor-injected dependencies.
  */
 abstract class Scope {
 
@@ -68,7 +78,7 @@ abstract class Scope {
 				WP_CLI::error( $e->getMessage() );
 			}
 
-			wp_die( $e->getMessage() );
+			wp_die( esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -115,11 +125,29 @@ abstract class Scope {
 	 * Initialize the module
 	 *
 	 * @param string $scope_file Path to the implementing file (use __FILE__).
-	 * @throws Container_Exception
-	 * @throws Circular_Dependency_Exception
-	 * @throws Not_Found_Exception
+	 * @throws Container_Exception When a dependency cannot be resolved.
+	 * @throws Circular_Dependency_Exception When a circular dependency is detected.
+	 * @throws Not_Found_Exception When a requested service is not found.
 	 */
 	protected function __construct( string $scope_file ) {
+		$base_path       = dirname( $scope_file );
+		$config_file     = $base_path . '/wpdi-config.php';
+		$config_bindings = file_exists( $config_file ) ? require $config_file : array();
+
+		$inspector     = new Class_Inspector();
+		$store         = new Cache_Store( $base_path );
+		$discovery     = new Auto_Discovery( $inspector );
+		$cache_manager = new Cache_Manager(
+			$store,
+			$discovery,
+			$inspector,
+			$this->normalize_paths( $base_path, $this->autowiring_paths() ),
+			$base_path,
+			$this->environment()
+		);
+
+		$cached = $cache_manager->get_cache( $scope_file, $config_bindings );
+
 		/*
 		 * The DI container is intentionally a throw-away instance (not stored in a property).
 		 *
@@ -128,19 +156,45 @@ abstract class Scope {
 		 * the Resolver into domain services defeats this and should be avoided.
 		 */
 		$container = new Container();
-		$container->initialize(
-			$scope_file,
-			$this->autowiring_paths(),
-			$this->environment()
-		);
+		$container->load_compiled( $cached );
 
 		$this->bootstrap( $container->resolver() );
 	}
 
 	/**
-	 * Composition root - only place where service location happens
+	 * Normalize relative autowiring paths to absolute paths
 	 *
-	 * @param Resolver $resolver Service resolver with get() and has() methods.
+	 * @param string $base_path Base directory.
+	 * @param array  $paths     Relative paths.
+	 * @return array Absolute paths with trailing slashes removed.
+	 */
+	private function normalize_paths( string $base_path, array $paths ): array {
+		$normalized = array();
+
+		foreach ( $paths as $path ) {
+			// Remove any .. to prevent traversal.
+			$path = str_replace( '..', '', $path );
+
+			// Convert relative to absolute.
+			$absolute = $base_path . '/' . ltrim( $path, '/' );
+
+			// Remove trailing slash.
+			$absolute = rtrim( $absolute, '/' );
+
+			$normalized[] = $absolute;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Composition root -- the single place where service location is acceptable.
+	 *
+	 * Resolve your top-level services here via $resolver->get(). Domain services
+	 * should receive their dependencies via constructor injection, never by
+	 * holding a reference to the Resolver.
+	 *
+	 * @param Resolver $resolver Service resolver with get() and has() methods only.
 	 */
 	abstract protected function bootstrap( Resolver $resolver ): void;
 }

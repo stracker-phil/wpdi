@@ -8,7 +8,7 @@ Closures cannot be serialized with `var_export()`, so caching factory functions 
 
 ## Decision
 
-The `Compiler` caches class metadata (path, mtime, dependencies) as a plain PHP array in `cache/wpdi-container.php`. On load, `Container::load_compiled()` recreates autowiring factories from metadata. `Cache_Manager` performs incremental updates: only modified files are re-parsed, deleted files removed, new dependencies discovered transitively.
+`Cache_Store` persists class metadata (path, mtime, dependencies) as a plain PHP array in `cache/wpdi-container.php`. On load, `Container::load_compiled()` recreates autowiring factories from metadata. `Cache_Manager` performs incremental updates: only modified files are re-parsed, deleted files removed, new dependencies discovered transitively.
 
 ## Amendment: Config Bindings Included in Cache
 
@@ -29,10 +29,31 @@ return array(
 
 The compiled cache is now a complete deployable artifact — a plugin can ship `cache/wpdi-container.php` without `wpdi-config.php` and the container initializes fully from cache alone.
 
+## Amendment: Cached Constructor Descriptors
+
+The `classes` section now includes a `constructor` key per class — a full snapshot of each constructor parameter (name, type, builtin flag, nullable, default value). This allows `Container::autowire()` to resolve dependencies from cached data without any `ReflectionClass` or `ReflectionParameter` calls at runtime.
+
+```php
+'classes' => array(
+    ConcreteA::class => array(
+        'path'         => ...,
+        'mtime'        => ...,
+        'dependencies' => array( DepB::class ),
+        'constructor'  => array(
+            array( 'name' => 'dep', 'type' => 'DepB', 'builtin' => false,
+                   'nullable' => false, 'has_default' => false, 'default' => null ),
+        ),
+    ),
+),
+```
+
+`constructor` is `null` when the class has no constructor. If a default value cannot be serialized (e.g. PHP 8.1 `new Foo()` in parameter defaults), `constructor` is omitted and the container falls back to reflection for that class. The `dependencies` key is kept alongside `constructor` because `Cache_Manager` and CLI commands read it directly.
+
 ## Consequences
 
 - Cache file is a simple `var_export()` array — no serialization issues
-- Production: zero filesystem overhead after initial compile (`wp di compile`)
+- Production: zero filesystem overhead and zero reflection after initial compile (`wp di compile`)
 - Development: per-file mtime checks, not full directory scans
 - Environment type is injected into `Cache_Manager` via `Scope::environment()` — no hard dependency on `wp_get_environment_type()`
 - Cache is the single source of truth for the full container definition in production
+- Reflection is only used as a fallback for classes not in the cache or with non-serializable defaults

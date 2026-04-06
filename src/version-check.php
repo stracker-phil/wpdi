@@ -1,9 +1,11 @@
 <?php
 /**
- * WPDI Version Compatibility Check
+ * WPDI Version Compatibility Check.
  *
  * Ensures only one version of WPDI loads when multiple plugins bundle it.
  * This file is loaded before any WPDI classes are declared.
+ *
+ * @package WPDI
  */
 
 $module_version = '1.1.1';
@@ -12,9 +14,9 @@ if ( ! defined( 'WPDI_VERSION' ) ) {
 	define( 'WPDI_VERSION', $module_version );
 }
 
-// Check if WPDI is already loaded by another plugin
+// Check if WPDI is already loaded by another plugin.
 if ( class_exists( 'WPDI\Scope' ) ) {
-	// ONLY fail if the loaded version is older than required
+	// ONLY fail if the loaded version is older than required.
 	if ( version_compare( WPDI_VERSION, $module_version, '<' ) ) {
 		$message = sprintf(
 			'WPDI Version Conflict: requires v%s, but v%s is already loaded. '

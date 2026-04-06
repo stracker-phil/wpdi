@@ -1,13 +1,11 @@
 <?php
 /**
  * WP-CLI command for inspecting WPDI service resolution
+ *
+ * @package WPDI\Commands
  */
 
 namespace WPDI\Commands;
-
-use WP_CLI;
-use WPDI\Auto_Discovery;
-use ReflectionNamedType;
 
 /**
  * Inspect how a class is resolved by WPDI
@@ -17,11 +15,12 @@ class Inspect_Command extends Command {
 	/**
 	 * Inspect a class and display its dependency tree
 	 *
-	 * Accepts a fully-qualified class name or a short (unqualified) name.
+	 * Accepts a fully qualified class name or a short (unqualified) name.
 	 * Short names are resolved by scanning the autodiscovery paths.
 	 *
 	 * @subcommand inspect
-	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>] [--format=<format>]
+	 * @synopsis <class> [--dir=<dir>] [--autowiring-paths=<paths>] [--depth=<depth>]
+	 *           [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -38,7 +37,7 @@ class Inspect_Command extends Command {
 	 * : Maximum tree depth to display (default: unlimited)
 	 *
 	 * [--format=<format>]
-	 * : Output format: ascii uses +/- borders instead of box-drawing characters
+	 * : Output format: table (default), ascii, json, yaml, csv
 	 *
 	 * ## EXAMPLES
 	 *
@@ -52,10 +51,25 @@ class Inspect_Command extends Command {
 		$max_depth        = isset( $assoc_args['depth'] ) ? (int) $assoc_args['depth'] : 0;
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 		$this->parse_format_flag( $assoc_args );
+		$this->load_module_cache( $path, $autowiring_paths );
 
-		// Resolve short class names via autodiscovery.
+		// Resolve short class names from cache.
 		if ( ! class_exists( $class_name ) && ! interface_exists( $class_name ) ) {
-			$class_name = $this->resolve_short_name( $class_name, $path, $autowiring_paths );
+			$class_name = $this->resolve_short_name( $class_name );
+		}
+
+		if ( $this->is_data_format() ) {
+			$data = $this->collect_tree_data( $class_name, 0, array(), $max_depth );
+
+			if ( 'json' === $this->format ) {
+				echo wp_json_encode( $data ) . "\n";
+			} else {
+				$flat = array();
+				$this->flatten_tree_data( $data, $flat );
+				$this->format_items( $flat, array( 'depth', 'param', 'type', 'class' ) );
+			}
+
+			return;
 		}
 
 		$type        = $this->inspector->get_type( $class_name );
@@ -79,57 +93,22 @@ class Inspect_Command extends Command {
 		// Skip the root row — the class identity is already shown by log_class_header.
 		$rows = array_slice( $rows, 1 );
 		$this->render_tree( $rows );
-		$this->results_found( $rows, '1 dependency', '%d dependencies', 'no dependencies'  );
+		$this->results_found( $rows, '1 dependency', '%d dependencies', 'no dependencies' );
 	}
 
 	/**
-	 * Check if a class has a binding in wpdi-config.php
+	 * Check if a class has a binding in wpdi-config.php.
 	 *
 	 * @param string $class_name Fully-qualified class name.
 	 * @param string $path       Module base path.
 	 * @return bool True if bound in config.
 	 */
 	private function get_config_binding( string $class_name, string $path ): bool {
-		$config_file = $path . '/wpdi-config.php';
-		if ( ! file_exists( $config_file ) ) {
-			return false;
-		}
-
-		$config = require $config_file;
+		$config = null !== $this->cache_data
+			? $this->cache_data['bindings']
+			: $this->load_config( $path );
 
 		return isset( $config[ $class_name ] );
-	}
-
-	/**
-	 * Get constructor parameter names mapped to their dependency class names
-	 *
-	 * @param string $class_name Fully-qualified class name.
-	 * @return array Associative array of parameter name => FQCN.
-	 */
-	private function get_constructor_param_map( string $class_name ): array {
-		$reflection = $this->inspector->get_reflection( $class_name );
-
-		if ( ! $reflection ) {
-			return array();
-		}
-
-		$constructor = $reflection->getConstructor();
-
-		if ( ! $constructor ) {
-			return array();
-		}
-
-		$map = array();
-
-		foreach ( $constructor->getParameters() as $param ) {
-			$type = $param->getType();
-
-			if ( $type instanceof ReflectionNamedType && ! $type->isBuiltin() ) {
-				$map[ '$' . $param->getName() ] = $type->getName();
-			}
-		}
-
-		return $map;
 	}
 
 	/**
@@ -164,7 +143,7 @@ class Inspect_Command extends Command {
 				'prefix_width' => 0,
 				'label'        => $this->get_short_class_name( $class_name ),
 				'type'         => $type_label,
-				'fqcn'         => $this->get_namespace( $class_name ) ?: $class_name,
+				'fqcn'         => $this->get_namespace( $class_name ) ? $this->get_namespace( $class_name ) : $class_name,
 			);
 		}
 
@@ -178,20 +157,32 @@ class Inspect_Command extends Command {
 			return;
 		}
 
-		$param_map = $this->get_constructor_param_map( $class_name );
+		$param_map = $this->get_full_param_map( $class_name );
 		$count     = count( $param_map );
 		$index     = 0;
 
-		foreach ( $param_map as $param_name => $dep_fqcn ) {
+		foreach ( $param_map as $param_name => $param_info ) {
+			$dep_fqcn   = $param_info['type'];
+			$is_builtin = $param_info['builtin'];
 			$is_last    = ( $index === $count - 1 );
 			$connector  = $this->tree_connector( $is_last );
 			$next_pad   = $this->tree_indent( $is_last );
 			$row_prefix = $child_prefix . $connector;
 			$row_width  = $prefix_width + 4;
-			$dep_type   = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
 
-			if ( in_array( $dep_fqcn, $visited, true ) ) {
+			if ( $is_builtin ) {
+				// Built-in types (string, bool, array, callable, etc.) are leaf
+				// nodes — the container cannot autowire them.
 				$rows[] = array(
+					'prefix'       => $row_prefix,
+					'prefix_width' => $row_width,
+					'label'        => $param_name,
+					'type'         => 'builtin',
+					'fqcn'         => $dep_fqcn,
+				);
+			} elseif ( in_array( $dep_fqcn, $visited, true ) ) {
+				$dep_type = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
+				$rows[]   = array(
 					'prefix'       => $row_prefix,
 					'prefix_width' => $row_width,
 					'label'        => $param_name,
@@ -199,7 +190,8 @@ class Inspect_Command extends Command {
 					'fqcn'         => $dep_fqcn . ' [CIRCULAR]',
 				);
 			} else {
-				$rows[] = array(
+				$dep_type = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
+				$rows[]   = array(
 					'prefix'       => $row_prefix,
 					'prefix_width' => $row_width,
 					'label'        => $param_name,
@@ -223,49 +215,83 @@ class Inspect_Command extends Command {
 	}
 
 	/**
-	 * Resolve a short (unqualified) class name to its FQCN via autodiscovery
+	 * Recursively collect a hierarchical data structure for machine-readable output.
 	 *
-	 * Scans autodiscovery paths for classes whose short name matches the input.
-	 * Errors if no match or multiple ambiguous matches are found.
-	 *
-	 * @param string $short_name       Short class name.
-	 * @param string $path             Module base path.
-	 * @param array  $autowiring_paths Autowiring paths.
-	 * @return string Resolved FQCN.
+	 * @param string $class_name Fully-qualified class name.
+	 * @param int    $depth      Current tree depth.
+	 * @param array  $visited    Classes already visited (circular detection).
+	 * @param int    $max_depth  Maximum depth (0 = unlimited).
+	 * @return array Hierarchical tree data.
 	 */
-	private function resolve_short_name( string $short_name, string $path, array $autowiring_paths ): string {
-		$discovery = new Auto_Discovery();
-		$matches   = array();
+	private function collect_tree_data( string $class_name, int $depth, array $visited, int $max_depth ): array {
+		$type_label = $this->format_type_label( $this->inspector->get_type( $class_name ) );
+		$data       = array(
+			'class'        => $class_name,
+			'type'         => $type_label,
+			'dependencies' => array(),
+		);
 
-		foreach ( $autowiring_paths as $autowiring_path ) {
-			$full_path = $path . '/' . $autowiring_path;
+		if ( in_array( $class_name, $visited, true ) ) {
+			$data['circular'] = true;
 
-			if ( ! is_dir( $full_path ) ) {
-				continue;
-			}
+			return $data;
+		}
 
-			foreach ( array_keys( $discovery->discover( $full_path ) ) as $fqcn ) {
-				if ( $this->get_short_class_name( $fqcn ) === $short_name ) {
-					$matches[] = $fqcn;
-				}
+		$visited[] = $class_name;
+
+		if ( $max_depth > 0 && $depth >= $max_depth ) {
+			return $data;
+		}
+
+		foreach ( $this->get_full_param_map( $class_name ) as $param_name => $param_info ) {
+			$dep_fqcn   = $param_info['type'];
+			$is_builtin = $param_info['builtin'];
+
+			if ( $is_builtin ) {
+				$data['dependencies'][] = array(
+					'param'        => $param_name,
+					'class'        => $dep_fqcn,
+					'type'         => 'builtin',
+					'dependencies' => array(),
+				);
+			} elseif ( in_array( $dep_fqcn, $visited, true ) ) {
+				$dep_type               = $this->format_type_label( $this->inspector->get_type( $dep_fqcn ) );
+				$data['dependencies'][] = array(
+					'param'        => $param_name,
+					'class'        => $dep_fqcn,
+					'type'         => $dep_type,
+					'circular'     => true,
+					'dependencies' => array(),
+				);
+			} else {
+				$child          = $this->collect_tree_data( $dep_fqcn, $depth + 1, $visited, $max_depth );
+				$child['param'] = $param_name;
+
+				$data['dependencies'][] = $child;
 			}
 		}
 
-		if ( empty( $matches ) ) {
-			$this->error( "Class or interface not found: {$short_name}" );
+		return $data;
+	}
+
+	/**
+	 * Flatten a hierarchical tree data structure into rows for csv/yaml output.
+	 *
+	 * @param array $node  Tree node from collect_tree_data().
+	 * @param array $flat  Flat rows collected by reference.
+	 * @param int   $depth Current depth level.
+	 */
+	private function flatten_tree_data( array $node, array &$flat, int $depth = 0 ): void {
+		$flat[] = array(
+			'depth' => $depth,
+			'param' => $node['param'] ?? '',
+			'type'  => $node['type'],
+			'class' => $node['class'] . ( ! empty( $node['circular'] ) ? ' [CIRCULAR]' : '' ),
+		);
+
+		foreach ( $node['dependencies'] as $child ) {
+			$this->flatten_tree_data( $child, $flat, $depth + 1 );
 		}
-
-		if ( count( $matches ) > 1 ) {
-			$this->log( "Ambiguous class name '{$short_name}'. Did you mean:" );
-
-			foreach ( $matches as $match ) {
-				$this->log( "  - {$match}" );
-			}
-
-			$this->error( 'Please use a fully-qualified class name.' );
-		}
-
-		return $matches[0];
 	}
 
 }

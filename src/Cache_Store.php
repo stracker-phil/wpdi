@@ -1,30 +1,56 @@
 <?php
 /**
- * Handles all cache file I/O operations for WPDI container
+ * Cache file I/O for the compiled WPDI container artifact.
+ *
+ * @package WPDI
  */
 
 namespace WPDI;
 
-class Compiler {
+/**
+ * Reads, writes, and deletes the compiled cache file that stores discovered
+ * class metadata and interface bindings.
+ */
+class Cache_Store {
 	private const CACHE_PATH = 'cache/wpdi-container.php';
 
+	/**
+	 * Absolute path to the cache file.
+	 *
+	 * @var string
+	 */
 	private string $cache_file;
+
+	/**
+	 * Directory containing the cache file.
+	 *
+	 * @var string
+	 */
 	private string $cache_dir;
 
+	/**
+	 * Set up cache paths.
+	 *
+	 * @param string $base_path Module root directory (e.g., plugin directory).
+	 */
 	public function __construct( string $base_path ) {
 		$this->cache_file = $base_path . '/' . self::CACHE_PATH;
 		$this->cache_dir  = dirname( $this->cache_file );
 	}
 
 	/**
-	 * Get the cache file path (for display purposes)
+	 * Get the cache file path (for display purposes).
+	 *
+	 * @return string Absolute path to the cache file.
 	 */
 	public function get_cache_file(): string {
 		return $this->cache_file;
 	}
 
 	/**
-	 * Check if cache file exists
+	 * Check if cache file exists.
+	 *
+	 * @return bool
 	 */
 	public function exists(): bool {
 		return file_exists( $this->cache_file );
@@ -50,7 +76,10 @@ class Compiler {
 	public function load(): array {
 		$this->ensure_dir();
 
-		$empty = array( 'classes' => array(), 'bindings' => array() );
+		$empty = array(
+			'classes'  => array(),
+			'bindings' => array(),
+		);
 
 		if ( ! file_exists( $this->cache_file ) ) {
 			return $empty;
@@ -62,9 +91,12 @@ class Compiler {
 			return $empty;
 		}
 
-		// Migrate old format (flat class map without 'classes' key)
+		// Migrate old format (flat class map without 'classes' key).
 		if ( ! isset( $result['classes'] ) ) {
-			return array( 'classes' => $result, 'bindings' => array() );
+			return array(
+				'classes'  => $result,
+				'bindings' => array(),
+			);
 		}
 
 		return array(
@@ -82,13 +114,22 @@ class Compiler {
 		@unlink( $this->cache_file );
 	}
 
+	/**
+	 * Ensure the cache directory exists and is writable.
+	 *
+	 * Creates the directory and a .gitignore file if absent. Called internally
+	 * before read/write operations; also used by Compile_Command to validate
+	 * writability before doing discovery work.
+	 *
+	 * @return bool True when directory exists and is writable.
+	 */
 	public function ensure_dir(): bool {
 		if ( ! is_dir( $this->cache_dir ) ) {
-			// Suppress warning on read-only filesystem
+			// Suppress warning on read-only filesystem.
 			@wp_mkdir_p( $this->cache_dir );
 		}
 
-		// Create .gitignore to prevent committing cache files
+		// Create .gitignore to prevent committing cache files.
 		$gitignore = $this->cache_dir . '/.gitignore';
 		if ( ! file_exists( $gitignore ) ) {
 			@file_put_contents( $gitignore, "# WPDI cache - rebuild with: wp di compile\nwpdi-container.php\n" );
@@ -106,8 +147,8 @@ class Compiler {
 	 *
 	 * Silently fails on read-only filesystems - caching is optional.
 	 *
-	 * @param array $class_map Class metadata (path, mtime, dependencies)
-	 * @param array $bindings  Config bindings from wpdi-config.php
+	 * @param array $class_map Class metadata (path, mtime, dependencies).
+	 * @param array $bindings  Config bindings from wpdi-config.php.
 	 * @return bool True on success, false on failure (including read-only filesystem)
 	 */
 	public function write( array $class_map, array $bindings = array() ): bool {
@@ -122,13 +163,13 @@ class Compiler {
 
 		$content  = "<?php\n\n";
 		$content .= "// Auto-generated WPDI cache - do not edit\n";
-		$content .= '// Generated: ' . date( 'Y-m-d H:i:s' ) . "\n";
+		$content .= '// Generated: ' . gmdate( 'Y-m-d H:i:s' ) . "\n";
 		$content .= '// Contains: ' . count( $class_map ) . ' discovered classes';
 		if ( ! empty( $bindings ) ) {
 			$content .= ', ' . count( $bindings ) . ' interface bindings';
 		}
 		$content .= "\n";
-		$content .= "// Format: {classes: {class => [path, mtime, dependencies]}, bindings: {interface => class}}\n\n";
+		$content .= "// Format: {classes: {class => [path, mtime, dependencies, constructor]}, bindings: {interface => class}}\n\n";
 		$content .= 'return ' . var_export( $data, true ) . ";\n";
 
 		return false !== @file_put_contents( $this->cache_file, $content );

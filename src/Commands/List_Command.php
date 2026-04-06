@@ -1,13 +1,11 @@
 <?php
 /**
- * WP-CLI command for listing WPDI services
+ * WP-CLI command for listing WPDI services.
+ *
+ * @package WPDI\Commands
  */
 
 namespace WPDI\Commands;
-
-use WPDI\Auto_Discovery;
-
-use function WP_CLI\Utils\format_items;
 
 /**
  * List services without compiling
@@ -43,7 +41,6 @@ class List_Command extends Command {
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$path             = $assoc_args['dir'] ?? getcwd();
-		$format           = $assoc_args['format'] ?? 'table';
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 		$this->parse_format_flag( $assoc_args );
 
@@ -51,44 +48,70 @@ class List_Command extends Command {
 			$this->error( "Directory does not exist: {$path}" );
 		}
 
-		$output = array();
+		$this->load_module_cache( $path, $autowiring_paths );
 
-		// Discover classes from autowiring paths
-		$discovery = new Auto_Discovery();
-		$classes   = array();
+		$classes = $this->cache_data['classes'];
+		$config  = $this->cache_data['bindings'];
+		$output  = array();
+		$listed  = array();
 
-		foreach ( $autowiring_paths as $autowiring_path ) {
-			$full_path = $path . '/' . $autowiring_path;
-
-			if ( ! is_dir( $full_path ) ) {
-				continue; // Skip non-existent paths silently in list command.
-			}
-
-			$discovered = $discovery->discover( $full_path );
-			$classes    = array_merge( $classes, $discovered );
-		}
-
+		// Collect non-concrete dependencies (interfaces, abstracts) from discovered classes.
+		$dep_classes = array();
 		foreach ( $classes as $class => $metadata ) {
-			$output[] = array(
-				'class'       => $class,
-				'type'        => $this->format_type_label( $this->inspector->get_type( $class ) ),
-				'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
-				'source'      => 'src',
-			);
+			foreach ( $metadata['dependencies'] as $dep ) {
+				if ( ! isset( $classes[ $dep ] ) && ! isset( $dep_classes[ $dep ] ) ) {
+					$dep_classes[ $dep ] = true;
+				}
+			}
 		}
 
-		// Load configured services from wpdi-config.php
-		$config_file = $path . '/wpdi-config.php';
-		if ( file_exists( $config_file ) ) {
-			$config = require $config_file;
-			foreach ( array_keys( $config ) as $class ) {
+		// 1. Concrete classes (all entries in classes section are concrete).
+		foreach ( $classes as $class => $metadata ) {
+			$output[]         = array(
+				'class'   => $class,
+				'type'    => 'class',
+				'binding' => '',
+				'mapped'  => '',
+			);
+			$listed[ $class ] = true;
+		}
+
+		// 2. Config entries (expanded for contextual bindings).
+		foreach ( $config as $class => $binding ) {
+			$listed[ $class ] = true;
+			$type             = $this->format_type_label( $this->inspector->get_type( $class ) );
+
+			if ( is_array( $binding ) ) {
+				foreach ( $binding as $param => $concrete ) {
+					$output[] = array(
+						'class'   => $class,
+						'type'    => $type,
+						'binding' => 'default' === $param ? 'default' : $param,
+						'mapped'  => $this->get_short_class_name( $concrete ),
+					);
+				}
+			} else {
 				$output[] = array(
-					'class'       => $class,
-					'type'        => $this->format_type_label( $this->inspector->get_type( $class ) ),
-					'autowirable' => $this->inspector->is_concrete( $class ) ? 'yes' : 'no',
-					'source'      => 'config',
+					'class'   => $class,
+					'type'    => $type,
+					'binding' => 'default',
+					'mapped'  => is_string( $binding ) ? $this->get_short_class_name( $binding ) : '',
 				);
 			}
+		}
+
+		// 3. Dependency interfaces/abstracts not in config (unbound).
+		foreach ( $dep_classes as $dep => $_ ) {
+			if ( isset( $listed[ $dep ] ) ) {
+				continue;
+			}
+
+			$output[] = array(
+				'class'   => $dep,
+				'type'    => $this->format_type_label( $this->inspector->get_type( $dep ) ),
+				'binding' => 'no config',
+				'mapped'  => '',
+			);
 		}
 
 		// Apply --filter substring match against class name.
@@ -101,19 +124,20 @@ class List_Command extends Command {
 			$output = array_values( $output );
 		}
 
-		if ( in_array( $format, array( 'json', 'yaml', 'csv' ), true ) ) {
-			format_items( $format, $output, array( 'class', 'type', 'autowirable', 'source' ) );
+		if ( $this->is_data_format() ) {
+			$this->format_items( $output, array( 'class', 'type', 'binding', 'mapped' ) );
 		} else {
-			$this->result_meta( [ 'filter' => $filter ] );
+			$this->result_meta( array( 'filter' => $filter ) );
 
 			if ( $output ) {
 				$this->table(
 					$output,
-					array( 'class', 'type', 'autowirable', 'source' ),
+					array( 'class', 'type', 'binding', 'mapped' ),
 					array(
-						'class'       => 'class_name',
-						'type'        => 'type_label',
-						'autowirable' => 'bool',
+						'class'   => 'class_name',
+						'type'    => 'type_label',
+						'binding' => 'binding_label',
+						'mapped'  => 'mapped_class',
 					)
 				);
 			}
@@ -121,4 +145,5 @@ class List_Command extends Command {
 			$this->results_found( $output, '1 entry', '%d entries', 'no results' );
 		}
 	}
+
 }

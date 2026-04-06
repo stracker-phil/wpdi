@@ -1,4 +1,9 @@
 <?php
+/**
+ * Centralized, cached class reflection utility.
+ *
+ * @package WPDI
+ */
 
 declare( strict_types = 1 );
 
@@ -8,10 +13,9 @@ use ReflectionClass;
 use ReflectionNamedType;
 
 /**
- * Centralized utility for class reflection operations
- *
- * Provides cached reflection to avoid duplicate ReflectionClass instantiation.
- * Single source of truth for class metadata, instantiability checks, and dependency extraction.
+ * Single source of truth for class metadata, instantiability checks, and
+ * dependency extraction. Caches ReflectionClass instances to avoid duplicate
+ * instantiation across discovery and resolution paths.
  */
 class Class_Inspector {
 	/**
@@ -42,7 +46,7 @@ class Class_Inspector {
 	}
 
 	/**
-	 * Check if class is concrete and instantiable
+	 * Check if a class is concrete and instantiable
 	 *
 	 * @param string $class_name Fully-qualified class name.
 	 * @return bool True if class is instantiable, concrete, and not an interface.
@@ -55,6 +59,64 @@ class Class_Inspector {
 		}
 
 		return $reflection->isInstantiable() && ! $reflection->isAbstract() && ! $reflection->isInterface();
+	}
+
+	/**
+	 * Extract full constructor parameter descriptors for caching.
+	 *
+	 * Returns null when the class has no constructor (instantiate with plain `new`),
+	 * or an ordered array of parameter descriptors suitable for var_export().
+	 *
+	 * @param string $class_name Fully-qualified class name.
+	 * @return array[]|null Null if no constructor, or array of param descriptor arrays.
+	 */
+	public function get_constructor_params( string $class_name ): ?array {
+		$reflection = $this->get_reflection( $class_name );
+
+		if ( ! $reflection ) {
+			return null;
+		}
+
+		$constructor = $reflection->getConstructor();
+
+		if ( ! $constructor ) {
+			return null;
+		}
+
+		$params = array();
+		foreach ( $constructor->getParameters() as $param ) {
+			$type      = $param->getType();
+			$builtin   = false;
+			$type_name = null;
+
+			if ( $type instanceof ReflectionNamedType ) {
+				$type_name = $type->getName();
+				$builtin   = $type->isBuiltin();
+			}
+
+			$descriptor = array(
+				'name'        => $param->getName(),
+				'type'        => $type_name,
+				'builtin'     => $builtin,
+				'nullable'    => $param->allowsNull(),
+				'has_default' => $param->isDefaultValueAvailable(),
+				'default'     => null,
+			);
+
+			if ( $descriptor['has_default'] ) {
+				try {
+					$descriptor['default'] = $param->getDefaultValue();
+				} catch ( \ReflectionException $e ) {
+					// Non-constant default (e.g. PHP 8.1 `new Foo()`).
+					// Omit constructor cache for this class — fall back to reflection.
+					return null;
+				}
+			}
+
+			$params[] = $descriptor;
+		}
+
+		return $params;
 	}
 
 	/**
@@ -90,51 +152,37 @@ class Class_Inspector {
 	/**
 	 * Get complete metadata for a class
 	 *
-	 * @param string $class_name Fully-qualified class name.
-	 * @param string $file_path  File path containing the class.
+	 * When $file_path is null, derives it from reflection (used for transitive
+	 * dependency discovery where the file path isn't known from directory scanning).
+	 *
+	 * @param string      $class_name Fully-qualified class name.
+	 * @param string|null $file_path  File path containing the class, or null to derive from
+	 *                                reflection.
 	 * @return array|null Metadata array (path, mtime, dependencies) or null if not concrete.
 	 */
-	public function get_metadata( string $class_name, string $file_path ): ?array {
-		if ( ! $this->is_concrete( $class_name ) ) {
-			return null;
-		}
-
-		return array(
-			'path'         => $file_path,
-			'mtime'        => filemtime( $file_path ),
-			'dependencies' => $this->get_dependencies( $class_name ),
-		);
-	}
-
-	/**
-	 * Get metadata for a class from reflection (without file path)
-	 *
-	 * Used for discovering dependencies dynamically where file path comes from reflection.
-	 *
-	 * @param string $class_name Fully-qualified class name (must exist).
-	 * @return array|null Metadata array or null if not discoverable.
-	 */
-	public function get_metadata_from_reflection( string $class_name ): ?array {
+	public function get_metadata( string $class_name, ?string $file_path = null ): ?array {
 		$reflection = $this->get_reflection( $class_name );
 
 		if ( ! $reflection ) {
 			return null;
 		}
 
-		// Must be instantiable and concrete
 		if ( ! $reflection->isInstantiable() || $reflection->isAbstract() || $reflection->isInterface() ) {
 			return null;
 		}
 
-		$file_path = $reflection->getFileName();
-		if ( ! $file_path ) {
-			return null; // Internal class
+		if ( null === $file_path ) {
+			$file_path = $reflection->getFileName();
+			if ( ! $file_path ) {
+				return null; // Internal class.
+			}
 		}
 
 		return array(
 			'path'         => $file_path,
 			'mtime'        => filemtime( $file_path ),
 			'dependencies' => $this->get_dependencies( $class_name ),
+			'constructor'  => $this->get_constructor_params( $class_name ),
 		);
 	}
 

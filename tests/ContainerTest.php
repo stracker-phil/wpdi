@@ -3,6 +3,10 @@
 namespace WPDI\Tests;
 
 use PHPUnit\Framework\TestCase;
+use WPDI\Auto_Discovery;
+use WPDI\Cache_Manager;
+use WPDI\Cache_Store;
+use WPDI\Class_Inspector;
 use WPDI\Container;
 use WPDI\Exceptions\Container_Exception;
 use WPDI\Exceptions\Not_Found_Exception;
@@ -355,10 +359,10 @@ class ContainerTest extends TestCase {
 
 	/**
 	 * GIVEN a production environment with a cached container file
-	 * WHEN the container is initialized
-	 * THEN it loads services from cache instead of performing discovery
+	 * WHEN load_compiled() is called with cached data
+	 * THEN services are resolvable from the container
 	 */
-	public function test_initialize_loads_cache_in_production_environment(): void {
+	public function test_load_compiled_loads_cache_in_production_environment(): void {
 		// Create a temporary directory structure
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_prod_' . uniqid();
 		mkdir( $temp_dir );
@@ -370,21 +374,20 @@ class ContainerTest extends TestCase {
 		$cache_content = "<?php\nreturn array(\n    '" . SimpleClass::class . "',\n);";
 		file_put_contents( $cache_file, $cache_content );
 
-		// Set environment to production
-		putenv( 'WP_ENVIRONMENT_TYPE=production' );
-
 		try {
-			$this->container->initialize( $temp_dir );
+			$cached = $this->build_cache( $temp_dir, $temp_dir . '/scope.php', 'production' );
+			$this->container->load_compiled( $cached );
 
 			$this->assertTrue( $this->container->has( SimpleClass::class ) );
 			$instance = $this->container->get( SimpleClass::class );
 			$this->assertInstanceOf( SimpleClass::class, $instance );
 		} finally {
-			// Restore environment to development
-			putenv( 'WP_ENVIRONMENT_TYPE=development' );
-
 			// Cleanup
 			unlink( $cache_file );
+			$gitignore = $temp_dir . '/cache/.gitignore';
+			if ( file_exists( $gitignore ) ) {
+				unlink( $gitignore );
+			}
 			rmdir( $temp_dir . '/cache' );
 			rmdir( $temp_dir . '/src' );
 			rmdir( $temp_dir );
@@ -392,11 +395,11 @@ class ContainerTest extends TestCase {
 	}
 
 	/**
-	 * GIVEN a wpdi-config.php file exists in the base directory
-	 * WHEN the container is initialized
-	 * THEN configuration bindings are loaded and available
+	 * GIVEN config bindings loaded via Cache_Manager
+	 * WHEN load_compiled() is called
+	 * THEN interface bindings are available in the container
 	 */
-	public function test_initialize_with_config_file(): void {
+	public function test_load_compiled_with_config_bindings(): void {
 		// Create a temporary directory structure
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_config_' . uniqid();
 		mkdir( $temp_dir );
@@ -407,11 +410,12 @@ class ContainerTest extends TestCase {
 		$config_content = "<?php\nreturn array(\n    '" . LoggerInterface::class . "' => '" . ArrayLogger::class . "',\n);";
 		file_put_contents( $config_file, $config_content );
 
-		// Create a fake scope file (initialize expects __FILE__ path)
 		$scope_file = $temp_dir . '/test-scope.php';
 		file_put_contents( $scope_file, "<?php\n// Fake scope file for testing" );
 
-		$this->container->initialize( $scope_file );
+		$config = require $config_file;
+		$cached = $this->build_cache( $temp_dir, $scope_file, 'development', $config );
+		$this->container->load_compiled( $cached );
 
 		// Should have loaded the interface binding from config
 		$this->assertTrue( $this->container->has( LoggerInterface::class ) );
@@ -422,7 +426,6 @@ class ContainerTest extends TestCase {
 		unlink( $config_file );
 		unlink( $scope_file );
 		rmdir( $temp_dir . '/src' );
-		// Cache directory might have been created
 		if ( is_dir( $temp_dir . '/cache' ) ) {
 			$cache_file = $temp_dir . '/cache/wpdi-container.php';
 			if ( file_exists( $cache_file ) ) {
@@ -439,11 +442,10 @@ class ContainerTest extends TestCase {
 
 	/**
 	 * GIVEN a directory with discoverable PHP classes in src/
-	 * WHEN the container is initialized
-	 * THEN classes are discovered, bound, and a cache file is created
+	 * WHEN Cache_Manager discovers and load_compiled() is called
+	 * THEN classes are bound and a cache file is created
 	 */
-	public function test_initialize_discovers_and_binds_classes(): void {
-		// Use a temporary directory with an /src subdirectory
+	public function test_load_compiled_discovers_and_binds_classes(): void {
 		$temp_dir = sys_get_temp_dir() . '/wpdi_test_bind_' . uniqid();
 		mkdir( $temp_dir );
 		mkdir( $temp_dir . '/src', 0777, true );
@@ -465,14 +467,13 @@ PHP;
 		// Load the class so it can be reflected during discovery
 		require_once $dest_class;
 
-		// Create a fresh container to ensure no pre-existing bindings
 		$container = new Container();
 
-		// Create a fake scope file (initialize expects __FILE__ path)
 		$scope_file = $temp_dir . '/test-scope.php';
 		file_put_contents( $scope_file, "<?php\n// Fake scope file for testing" );
 
-		$container->initialize( $scope_file );
+		$cached = $this->build_cache( $temp_dir, $scope_file );
+		$container->load_compiled( $cached );
 
 		$this->assertTrue( $container->has( 'WPDI\Tests\Discovery\DiscoverableTestClass' ) );
 
@@ -494,6 +495,25 @@ PHP;
 		rmdir( $temp_dir . '/cache' );
 		rmdir( $temp_dir . '/src' );
 		rmdir( $temp_dir );
+	}
+
+	/**
+	 * Build cache using Cache_Manager (mirrors what Scope does)
+	 */
+	private function build_cache( string $base_path, string $scope_file, string $environment = 'development', array $config_bindings = array() ): array {
+		$inspector     = new Class_Inspector();
+		$store         = new Cache_Store( $base_path );
+		$discovery     = new Auto_Discovery( $inspector );
+		$cache_manager = new Cache_Manager(
+			$store,
+			$discovery,
+			$inspector,
+			array( $base_path . '/src' ),
+			$base_path,
+			$environment
+		);
+
+		return $cache_manager->get_cache( $scope_file, $config_bindings );
 	}
 
 	// ========================================
@@ -779,6 +799,324 @@ PHP;
 				'no_dollar' => DB_Cache::class,
 			)
 		);
+	}
+
+	// ========================================
+	// Configuration Validation Tests
+	// ========================================
+
+	/**
+	 * GIVEN a config array with a non-string concrete value
+	 * WHEN load_config() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_load_config_throws_for_non_string_concrete(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'must be a valid class or interface name' );
+
+		$this->container->load_config( array(
+			SimpleClass::class => 42,
+		) );
+	}
+
+	/**
+	 * GIVEN a config array with an invalid class name string
+	 * WHEN load_config() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_load_config_throws_for_invalid_class_string(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( "'NonExistentClass'" );
+
+		$this->container->load_config( array(
+			SimpleClass::class => 'NonExistentClass',
+		) );
+	}
+
+	/**
+	 * GIVEN an invalid abstract name (non-existent class/interface)
+	 * WHEN bind_contextual() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_bind_contextual_throws_for_invalid_abstract(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( "'InvalidAbstract' must be a valid class or interface name" );
+
+		$this->container->bind_contextual(
+			'InvalidAbstract',
+			array( '$param' => DB_Cache::class )
+		);
+	}
+
+	/**
+	 * GIVEN a contextual binding with a non-string concrete value
+	 * WHEN bind_contextual() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_bind_contextual_throws_for_non_string_concrete(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'must be a valid class or interface name' );
+
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array( '$cache' => 42 )
+		);
+	}
+
+	/**
+	 * GIVEN a contextual binding with an invalid class name
+	 * WHEN bind_contextual() is called
+	 * THEN a Container_Exception is thrown
+	 */
+	public function test_bind_contextual_throws_for_invalid_concrete_class(): void {
+		$this->expectException( Container_Exception::class );
+		$this->expectExceptionMessage( 'must be a valid class or interface name' );
+
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array( '$cache' => 'NonExistentConcrete' )
+		);
+	}
+
+	/**
+	 * GIVEN load_compiled() called with no bindings key
+	 * WHEN resolving classes
+	 * THEN container works with empty bindings
+	 */
+	public function test_load_compiled_handles_missing_bindings_key(): void {
+		$this->container->load_compiled( array(
+			'classes' => array(
+				SimpleClass::class => '/fake/path.php',
+			),
+		) );
+
+		$this->assertTrue( $this->container->has( SimpleClass::class ) );
+	}
+
+	/**
+	 * GIVEN a contextual binding registered via bind_contextual()
+	 * WHEN has() is called with the contextual-bound interface
+	 * THEN it returns true
+	 */
+	public function test_has_returns_true_for_contextual_binding(): void {
+		$this->container->bind_contextual(
+			CacheInterface::class,
+			array( 'default' => DB_Cache::class )
+		);
+
+		$this->assertTrue( $this->container->has( CacheInterface::class ) );
+	}
+
+	// ========================================
+	// Cached Constructor Resolution Tests
+	// ========================================
+
+	/**
+	 * GIVEN a compiled cache with constructor descriptors for a no-arg class
+	 * WHEN the class is resolved
+	 * THEN instantiation succeeds without reflection
+	 */
+	public function test_cached_constructor_resolves_class_without_constructor(): void {
+		$this->container->load_compiled( array(
+			'classes'  => array(
+				SimpleClass::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array(),
+					'constructor'  => null,
+				),
+			),
+			'bindings' => array(),
+		) );
+
+		$instance = $this->container->get( SimpleClass::class );
+		$this->assertInstanceOf( SimpleClass::class, $instance );
+	}
+
+	/**
+	 * GIVEN a compiled cache with constructor descriptors for a class with dependency
+	 * WHEN the class is resolved
+	 * THEN dependencies are injected from cache without reflection
+	 */
+	public function test_cached_constructor_resolves_class_with_dependency(): void {
+		$this->container->load_compiled( array(
+			'classes'  => array(
+				SimpleClass::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array(),
+					'constructor'  => null,
+				),
+				ClassWithDependency::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array( SimpleClass::class ),
+					'constructor'  => array(
+						array(
+							'name'        => 'dependency',
+							'type'        => SimpleClass::class,
+							'builtin'     => false,
+							'nullable'    => false,
+							'has_default' => false,
+							'default'     => null,
+						),
+					),
+				),
+			),
+			'bindings' => array(),
+		) );
+
+		$instance = $this->container->get( ClassWithDependency::class );
+		$this->assertInstanceOf( ClassWithDependency::class, $instance );
+		$this->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
+	}
+
+	/**
+	 * GIVEN a compiled cache with constructor descriptors for scalar defaults
+	 * WHEN the class is resolved
+	 * THEN default values are used from cache
+	 */
+	public function test_cached_constructor_uses_scalar_defaults(): void {
+		$this->container->load_compiled( array(
+			'classes'  => array(
+				ClassWithDefaultValue::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array(),
+					'constructor'  => array(
+						array(
+							'name'        => 'name',
+							'type'        => 'string',
+							'builtin'     => true,
+							'nullable'    => false,
+							'has_default' => true,
+							'default'     => 'default',
+						),
+						array(
+							'name'        => 'count',
+							'type'        => 'int',
+							'builtin'     => true,
+							'nullable'    => false,
+							'has_default' => true,
+							'default'     => 10,
+						),
+					),
+				),
+			),
+			'bindings' => array(),
+		) );
+
+		$instance = $this->container->get( ClassWithDefaultValue::class );
+		$this->assertInstanceOf( ClassWithDefaultValue::class, $instance );
+		$this->assertEquals( 'default', $instance->get_name() );
+		$this->assertEquals( 10, $instance->get_count() );
+	}
+
+	/**
+	 * GIVEN a compiled cache with a nullable param for an unbound interface
+	 * WHEN the class is resolved
+	 * THEN null is injected
+	 */
+	public function test_cached_constructor_resolves_nullable_to_null(): void {
+		$this->container->load_compiled( array(
+			'classes'  => array(
+				ClassWithNullableParameter::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array( LoggerInterface::class ),
+					'constructor'  => array(
+						array(
+							'name'        => 'optional',
+							'type'        => LoggerInterface::class,
+							'builtin'     => false,
+							'nullable'    => true,
+							'has_default' => false,
+							'default'     => null,
+						),
+					),
+				),
+			),
+			'bindings' => array(),
+		) );
+
+		$instance = $this->container->get( ClassWithNullableParameter::class );
+		$this->assertInstanceOf( ClassWithNullableParameter::class, $instance );
+		$this->assertFalse( $instance->has_dependency() );
+	}
+
+	/**
+	 * GIVEN a compiled cache with contextual binding params
+	 * WHEN the class is resolved
+	 * THEN correct contextual bindings are applied from cache
+	 */
+	public function test_cached_constructor_resolves_contextual_bindings(): void {
+		$this->container->load_compiled( array(
+			'classes'  => array(
+				DB_Cache::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array(),
+					'constructor'  => null,
+				),
+				File_Cache::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array(),
+					'constructor'  => null,
+				),
+				ClassWithContextualDeps::class => array(
+					'path'         => '/fake/path.php',
+					'mtime'        => 1234567890,
+					'dependencies' => array( CacheInterface::class, CacheInterface::class ),
+					'constructor'  => array(
+						array(
+							'name'        => 'db_cache',
+							'type'        => CacheInterface::class,
+							'builtin'     => false,
+							'nullable'    => false,
+							'has_default' => false,
+							'default'     => null,
+						),
+						array(
+							'name'        => 'file_cache',
+							'type'        => CacheInterface::class,
+							'builtin'     => false,
+							'nullable'    => false,
+							'has_default' => false,
+							'default'     => null,
+						),
+					),
+				),
+			),
+			'bindings' => array(
+				CacheInterface::class => array(
+					'$db_cache'   => DB_Cache::class,
+					'$file_cache' => File_Cache::class,
+				),
+			),
+		) );
+
+		$instance = $this->container->get( ClassWithContextualDeps::class );
+		$this->assertInstanceOf( ClassWithContextualDeps::class, $instance );
+		$this->assertInstanceOf( DB_Cache::class, $instance->get_db_cache() );
+		$this->assertInstanceOf( File_Cache::class, $instance->get_file_cache() );
+	}
+
+	/**
+	 * GIVEN a class NOT in the compiled cache
+	 * WHEN the class is resolved
+	 * THEN the container falls back to reflection-based autowiring
+	 */
+	public function test_falls_back_to_reflection_when_no_cache(): void {
+		// Load a cache that does NOT include ClassWithDependency
+		$this->container->load_compiled( array(
+			'classes'  => array(),
+			'bindings' => array(),
+		) );
+
+		$instance = $this->container->get( ClassWithDependency::class );
+		$this->assertInstanceOf( ClassWithDependency::class, $instance );
+		$this->assertInstanceOf( SimpleClass::class, $instance->get_dependency() );
 	}
 
 	// ========================================

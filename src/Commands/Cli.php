@@ -2,8 +2,10 @@
 /**
  * Standalone WP-CLI command registration.
  *
- * PSR-4 autoloaded — call WPDI\Commands\Cli::register_commands() from any
+ * PSR-4 autoloaded -- call WPDI\Commands\Cli::register_commands() from any
  * plugin without needing to instantiate Scope first.
+ *
+ * @package WPDI\Commands
  */
 
 declare( strict_types = 1 );

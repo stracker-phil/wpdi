@@ -581,6 +581,122 @@ class DependsCommandTest extends TestCase {
 	}
 
 	/**
+	 * Get format_items call from WP_CLI tracked calls
+	 */
+	private function getFormatItemsCall(): ?array {
+		foreach ( WP_CLI::get_calls() as $call ) {
+			if ( 'format_items' === $call['method'] ) {
+				return $call;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * GIVEN a class with dependents
+	 * WHEN finding dependents with --format=json
+	 * THEN should output data via format_items with no visual output
+	 */
+	public function test_json_format_outputs_data_via_format_items(): void {
+		$dep_class = 'Json_Dep_Consumer_' . uniqid();
+		$this->createClassWithDependency( $dep_class, 'WPDI\\Tests\\Fixtures\\SimpleClass', 'dep' );
+
+		$command = new Depends_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call, 'format_items should be called' );
+		$this->assertEquals( 'json', $format_call['args'][0] );
+		$this->assertCount( 1, $format_call['args'][1] );
+		$this->assertEquals( $dep_class, $format_call['args'][1][0]['class'] );
+		$this->assertEquals( '$dep', $format_call['args'][1][0]['param'] );
+
+		// No visual output should be produced.
+		$logs = $this->getWpCliCalls( 'log' );
+		$this->assertEmpty( $logs );
+	}
+
+	/**
+	 * GIVEN a class with dependents
+	 * WHEN finding dependents with --format=csv
+	 * THEN should output data via format_items
+	 */
+	public function test_csv_format_outputs_data_via_format_items(): void {
+		$dep_class = 'Csv_Dep_Consumer_' . uniqid();
+		$this->createClassWithDependency( $dep_class, 'WPDI\\Tests\\Fixtures\\SimpleClass', 'dep' );
+
+		$command = new Depends_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'csv',
+			)
+		);
+
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call, 'format_items should be called' );
+		$this->assertEquals( 'csv', $format_call['args'][0] );
+		$this->assertEquals(
+			array( 'type', 'class', 'param', 'config mapping' ),
+			$format_call['args'][2]
+		);
+	}
+
+	/**
+	 * GIVEN no dependents
+	 * WHEN finding dependents with --format=json
+	 * THEN should output empty array via format_items
+	 */
+	public function test_json_format_outputs_empty_array_when_no_dependents(): void {
+		$command = new Depends_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call );
+		$this->assertEmpty( $format_call['args'][1] );
+	}
+
+	/**
+	 * GIVEN classes in src/
+	 * WHEN finding dependents
+	 * THEN should create a cache file as a side effect (via Cache_Manager)
+	 */
+	public function test_creates_cache_via_cache_manager(): void {
+		$dep_class = 'Cache_Dep_Consumer_' . uniqid();
+		$this->createClassWithDependency( $dep_class, 'WPDI\\Tests\\Fixtures\\SimpleClass', 'dep' );
+
+		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
+		$this->assertFileDoesNotExist( $cache_file, 'Precondition: no cache yet' );
+
+		$command = new Depends_Command();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\SimpleClass' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+		$this->assertStringContainsString( $dep_class, $output );
+		$this->assertFileExists( $cache_file, 'Cache_Manager should create cache file' );
+	}
+
+	/**
 	 * Create a class file with a single typed constructor dependency and load it
 	 *
 	 * @param string $class_name  Short class name (no namespace).

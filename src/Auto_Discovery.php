@@ -1,4 +1,9 @@
 <?php
+/**
+ * Token-based PHP class discovery for autowiring registration.
+ *
+ * @package WPDI
+ */
 
 declare( strict_types = 1 );
 
@@ -8,19 +13,32 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
 /**
- * Discovers classes for auto-registration
+ * Scans PHP files for concrete classes and extracts their metadata for the
+ * container's zero-config autowiring.
  */
 class Auto_Discovery {
+
+	/**
+	 * Class metadata inspector.
+	 *
+	 * @var Class_Inspector
+	 */
 	private Class_Inspector $inspector;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param Class_Inspector|null $inspector Optional inspector instance.
+	 */
 	public function __construct( ?Class_Inspector $inspector = null ) {
 		$this->inspector = $inspector ?? new Class_Inspector();
 	}
 
 	/**
-	 * Discover concrete classes in directory
+	 * Discover concrete classes in a directory tree.
 	 *
-	 * @return array Array mapping class names to metadata (path, mtime, dependencies)
+	 * @param string $directory Absolute path to scan recursively.
+	 * @return array Array mapping FQCN to metadata (path, mtime, dependencies).
 	 */
 	public function discover( string $directory ): array {
 		if ( ! is_dir( $directory ) ) {
@@ -37,20 +55,17 @@ class Auto_Discovery {
 				continue;
 			}
 
-			$file_path          = $file->getPathname();
-			$discovered_classes = $this->extract_classes_from_file( $file_path );
-
-			// Map each class to its file path (temporary, will add metadata later)
-			foreach ( $discovered_classes as $class ) {
-				$class_map[ $class ] = $file_path;
-			}
+			$class_map = array_merge( $class_map, $this->parse_file( $file->getPathname() ) );
 		}
 
-		return $this->filter_concrete_classes( $class_map );
+		return $class_map;
 	}
 
 	/**
-	 * Extract class names from PHP file
+	 * Extract fully-qualified class names from a PHP file using token analysis.
+	 *
+	 * @param string $file Absolute file path.
+	 * @return string[] List of FQCNs found in the file.
 	 */
 	private function extract_classes_from_file( string $file ): array {
 		$content = file_get_contents( $file );
@@ -59,17 +74,17 @@ class Auto_Discovery {
 		$classes   = array();
 		$namespace = '';
 
-		foreach ( $tokens as $i => $iValue ) {
-			if ( ! is_array( $iValue ) ) {
+		foreach ( $tokens as $i => $i_value ) {
+			if ( ! is_array( $i_value ) ) {
 				continue;
 			}
 
-			if ( T_NAMESPACE === $iValue[0] ) {
+			if ( T_NAMESPACE === $i_value[0] ) {
 				$namespace = $this->extract_namespace( $tokens, $i );
 				continue;
 			}
 
-			if ( T_CLASS === $iValue[0] ) {
+			if ( T_CLASS === $i_value[0] ) {
 				$class_name = $this->extract_class_name( $tokens, $i );
 
 				if ( $class_name ) {
@@ -83,15 +98,22 @@ class Auto_Discovery {
 	}
 
 	/**
-	 * Extract namespace from tokens
+	 * Walk tokens forward from T_NAMESPACE to collect the namespace string.
+	 *
+	 * Handles PHP 8.0+ T_NAME_QUALIFIED tokens alongside T_STRING / T_NS_SEPARATOR.
+	 *
+	 * @param array $tokens PHP token array.
+	 * @param int   $index  Current token index (modified by reference).
+	 * @return string Namespace string.
 	 */
 	private function extract_namespace( array $tokens, int &$index ): string {
 		$namespace = '';
-		$index ++; // Skip T_NAMESPACE
+		$index ++; // Skip T_NAMESPACE.
+		$count = count( $tokens );
 
-		while ( $index < count( $tokens ) ) {
+		while ( $index < $count ) {
 			if ( is_array( $tokens[ $index ] ) ) {
-				// PHP 8.0+ uses T_NAME_QUALIFIED for namespaces like "Foo\Bar"
+				// PHP 8.0+ uses T_NAME_QUALIFIED for namespaces like "Foo\Bar".
 				$token_type = $tokens[ $index ][0];
 
 				if ( T_STRING === $token_type || T_NS_SEPARATOR === $token_type ||
@@ -108,12 +130,17 @@ class Auto_Discovery {
 	}
 
 	/**
-	 * Extract class name from tokens
+	 * Walk tokens forward from T_CLASS to find the class identifier.
+	 *
+	 * @param array $tokens PHP token array.
+	 * @param int   $index  Current token index (modified by reference).
+	 * @return string Class name, or empty string if not found.
 	 */
 	private function extract_class_name( array $tokens, int &$index ): string {
-		$index ++; // Skip T_CLASS
+		$index ++; // Skip T_CLASS.
+		$count = count( $tokens );
 
-		while ( $index < count( $tokens ) ) {
+		while ( $index < $count ) {
 			if ( is_array( $tokens[ $index ] ) && T_STRING === $tokens[ $index ][0] ) {
 				return $tokens[ $index ][1];
 			}
@@ -135,7 +162,7 @@ class Auto_Discovery {
 			return array();
 		}
 
-		// Map classes to file path temporarily
+		// Map classes to file path temporarily.
 		$class_map = array();
 		foreach ( $classes as $class ) {
 			$class_map[ $class ] = $file_path;
@@ -145,23 +172,10 @@ class Auto_Discovery {
 	}
 
 	/**
-	 * Get metadata for a single class via reflection
-	 *
-	 * Used for dynamically-discovered dependencies where file path
-	 * is not known from directory scanning.
-	 *
-	 * @param string $class_name Fully qualified class name (must exist).
-	 * @return array|null Metadata array or null if not discoverable.
-	 */
-	public function get_class_metadata( string $class_name ): ?array {
-		return $this->inspector->get_metadata_from_reflection( $class_name );
-	}
-
-	/**
 	 * Filter to only concrete, instantiable classes
 	 *
-	 * @param array $class_map Array mapping class names to file paths
-	 * @return array Filtered array mapping class names to metadata (path, mtime, dependencies)
+	 * @param array $class_map Array mapping class names to file paths.
+	 * @return array Filtered array mapping class names to metadata (path, mtime, dependencies).
 	 */
 	private function filter_concrete_classes( array $class_map ): array {
 		$concrete = array();

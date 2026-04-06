@@ -1,11 +1,13 @@
 <?php
 /**
- * WP-CLI command for clearing WPDI cache
+ * WP-CLI command for clearing WPDI cache.
+ *
+ * @package WPDI\Commands
  */
 
 namespace WPDI\Commands;
 
-use WPDI\Compiler;
+use WPDI\Cache_Store;
 
 /**
  * Clear compiled WPDI cache files
@@ -28,25 +30,25 @@ class Clear_Command extends Command {
 	 *     wp di clear --dir=/path/to/module
 	 */
 	public function __invoke( $args, $assoc_args ) {
-		$path     = $assoc_args['dir'] ?? getcwd();
-		$compiler = new Compiler( $path );
+		$path  = $assoc_args['dir'] ?? getcwd();
+		$store = new Cache_Store( $path );
 
-		if ( $compiler->exists() ) {
-			$cache_file = $compiler->get_cache_file();
-			$compiler->delete();
+		if ( $store->exists() ) {
+			$cache_file = $store->get_cache_file();
+			$store->delete();
 
-			// Verify deletion worked
-			if ( ! $compiler->exists() ) {
+			// Verify deletion worked.
+			if ( ! $store->exists() ) {
 				$this->success( "Cache cleared: {$cache_file}" );
 			} else {
 				$this->error( "Failed to delete cache file: {$cache_file}" );
 			}
 		} else {
-			$this->log( 'No cache file found at: ' . $compiler->get_cache_file() );
+			$this->log( 'No cache file found at: ' . $store->get_cache_file() );
 		}
 
 		// Clear the entire cache directory, if empty.
-		$cache_dir = dirname( $compiler->get_cache_file() );
+		$cache_dir = dirname( $store->get_cache_file() );
 		if ( is_dir( $cache_dir ) && 2 === count( scandir( $cache_dir ) ) ) { // Only . and ..
 			if ( @rmdir( $cache_dir ) ) {
 				$this->success( 'Removed empty cache directory' );

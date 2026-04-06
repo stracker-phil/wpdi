@@ -3,7 +3,10 @@
 namespace WPDI\Tests;
 
 use PHPUnit\Framework\TestCase;
+use WPDI\Auto_Discovery;
 use WPDI\Cache_Manager;
+use WPDI\Cache_Store;
+use WPDI\Class_Inspector;
 use WPDI\Tests\Fixtures\SimpleClass;
 use WPDI\Tests\Fixtures\ClassWithDependency;
 use WPDI\Tests\Fixtures\ClassWithChainedDependency;
@@ -39,6 +42,21 @@ class CacheManagerTest extends TestCase {
 		putenv( 'WP_ENVIRONMENT_TYPE=development' );
 	}
 
+	private function create_cache_manager( string $environment = 'development' ): Cache_Manager {
+		$inspector = new Class_Inspector();
+		$store     = new Cache_Store( $this->test_base_path );
+		$discovery = new Auto_Discovery( $inspector );
+
+		return new Cache_Manager(
+			$store,
+			$discovery,
+			$inspector,
+			array( $this->src_path ),
+			$this->test_base_path,
+			$environment
+		);
+	}
+
 	private function cleanup_directory( string $path ): void {
 		if ( ! is_dir( $path ) ) {
 			return;
@@ -63,7 +81,7 @@ class CacheManagerTest extends TestCase {
 	 * THEN it rebuilds cache from scratch and creates the cache file
 	 */
 	public function test_rebuilds_cache_when_missing(): void {
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 
 		$result = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
@@ -86,7 +104,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
+		$cache_manager = $this->create_cache_manager( 'production' );
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertEquals( $cached_data, $result['classes'] );
@@ -109,7 +127,7 @@ class CacheManagerTest extends TestCase {
 
 		$live_bindings = array( 'SomeInterface' => 'SomeConcrete' );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
+		$cache_manager = $this->create_cache_manager( 'production' );
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php', $live_bindings );
 
 		$this->assertEquals( $live_bindings, $result['bindings'] );
@@ -132,7 +150,7 @@ class CacheManagerTest extends TestCase {
 		$cached_bindings = array( 'SomeInterface' => 'SomeConcrete' );
 		$this->write_cache_file( $cached_classes, $cached_bindings );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path, array( 'src' ), 'production' );
+		$cache_manager = $this->create_cache_manager( 'production' );
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php', array() );
 
 		$this->assertEquals( $cached_bindings, $result['bindings'] );
@@ -148,7 +166,7 @@ class CacheManagerTest extends TestCase {
 	public function test_rebuilds_on_invalid_cache( array $cached_data ): void {
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertIsArray( $result );
@@ -213,7 +231,7 @@ class CacheManagerTest extends TestCase {
 			? $trigger_file
 			: $this->test_base_path . '/scope.php';
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $scope_file );
 
 		// Should have rebuilt (empty src/ means empty result)
@@ -254,7 +272,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayNotHasKey( 'DeletedClass', $result['classes'] );
@@ -280,7 +298,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayHasKey( 'UnmodifiedClass', $result['classes'] );
@@ -312,7 +330,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// File should be re-parsed but may not have loadable class
@@ -330,7 +348,7 @@ class CacheManagerTest extends TestCase {
 	 * THEN cache file is created with empty array
 	 */
 	public function test_creates_cache_file_for_empty_src(): void {
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertFileExists( $this->cache_file );
@@ -347,7 +365,7 @@ class CacheManagerTest extends TestCase {
 		// Remove cache directory
 		rmdir( dirname( $this->cache_file ) );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertDirectoryExists( dirname( $this->cache_file ) );
@@ -380,7 +398,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// SimpleClass should be discovered as dependency
@@ -412,7 +430,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		// SimpleClass has no dependencies, but should be discovered
@@ -445,7 +463,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayNotHasKey( $dependency_class, $result['classes'], "Failed for: {$reason}" );
@@ -486,7 +504,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
@@ -518,7 +536,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayHasKey( $class1, $result['classes'] );
@@ -548,7 +566,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
@@ -574,7 +592,7 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayHasKey( ClassWithChainedDependency::class, $result['classes'] );
@@ -606,11 +624,40 @@ class CacheManagerTest extends TestCase {
 		);
 		$this->write_cache_file( $cached_data );
 
-		$cache_manager = new Cache_Manager( $this->test_base_path );
+		$cache_manager = $this->create_cache_manager();
 		$result        = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
 
 		$this->assertArrayNotHasKey( 'WPDI\\Tests\\Fixtures\\AbstractClass', $result['classes'] );
 		$this->assertArrayHasKey( SimpleClass::class, $result['classes'] );
+	}
+
+	// ========================================
+	// Autowiring Path Tests
+	// ========================================
+
+	/**
+	 * GIVEN an autowiring path that does not exist on disk
+	 * WHEN the cache is rebuilt
+	 * THEN the non-existent path is skipped silently
+	 */
+	public function test_skips_nonexistent_autowiring_path(): void {
+		$inspector = new Class_Inspector();
+		$store     = new Cache_Store( $this->test_base_path );
+		$discovery = new Auto_Discovery( $inspector );
+
+		$cache_manager = new Cache_Manager(
+			$store,
+			$discovery,
+			$inspector,
+			array( $this->src_path, $this->test_base_path . '/nonexistent_path' ),
+			$this->test_base_path,
+			'development'
+		);
+
+		$result = $cache_manager->get_cache( $this->test_base_path . '/scope.php' );
+
+		$this->assertIsArray( $result );
+		$this->assertEmpty( $result['classes'] );
 	}
 
 	// ========================================

@@ -1,49 +1,83 @@
 <?php
 /**
- * Manages WPDI container cache with incremental updates
+ * Cache lifecycle management for the WPDI container.
+ *
+ * @package WPDI
  */
 
 namespace WPDI;
 
+/**
+ * Orchestrates cache loading, staleness detection, incremental updates, and full
+ * rebuilds. Delegates file I/O to Cache_Store and class discovery to Auto_Discovery.
+ */
 class Cache_Manager {
+	/**
+	 * Module root path.
+	 *
+	 * @var string
+	 */
 	private string $base_path;
-	private array $autowiring_paths;
-	private string $environment;
-	private Compiler $compiler;
-	private Auto_Discovery $discovery;
-
-	public function __construct( string $base_path, array $autowiring_paths = array( 'src' ), string $environment = 'development', ?Class_Inspector $inspector = null ) {
-		$this->base_path        = $base_path;
-		$this->autowiring_paths = $this->normalize_paths( $base_path, $autowiring_paths );
-		$this->environment      = $environment;
-		$this->compiler         = new Compiler( $base_path );
-		$this->discovery        = new Auto_Discovery( $inspector ?? new Class_Inspector() );
-	}
 
 	/**
-	 * Normalize relative paths to absolute paths
+	 * Absolute paths to scan for classes.
 	 *
-	 * @param string $base_path Base directory.
-	 * @param array  $paths     Relative paths.
-	 * @return array Absolute paths with trailing slashes removed.
+	 * @var array
 	 */
-	private function normalize_paths( string $base_path, array $paths ): array {
-		$normalized = array();
+	private array $autowiring_paths;
 
-		foreach ( $paths as $path ) {
-			// Remove any .. to prevent traversal
-			$path = str_replace( '..', '', $path );
+	/**
+	 * Runtime environment name.
+	 *
+	 * @var string
+	 */
+	private string $environment;
 
-			// Convert relative to absolute
-			$absolute = $base_path . '/' . ltrim( $path, '/' );
+	/**
+	 * Cache file I/O handler.
+	 *
+	 * @var Cache_Store
+	 */
+	private Cache_Store $store;
 
-			// Remove trailing slash
-			$absolute = rtrim( $absolute, '/' );
+	/**
+	 * Class scanner.
+	 *
+	 * @var Auto_Discovery
+	 */
+	private Auto_Discovery $discovery;
 
-			$normalized[] = $absolute;
-		}
+	/**
+	 * Reflection utility.
+	 *
+	 * @var Class_Inspector
+	 */
+	private Class_Inspector $inspector;
 
-		return $normalized;
+	/**
+	 * Initialize cache manager with its collaborators.
+	 *
+	 * @param Cache_Store     $store            Cache file I/O.
+	 * @param Auto_Discovery  $discovery        Class scanner.
+	 * @param Class_Inspector $inspector        Reflection utility.
+	 * @param array           $autowiring_paths Absolute paths to scan for classes.
+	 * @param string          $base_path        Module root (for config file lookup).
+	 * @param string          $environment      'production' skips staleness checks.
+	 */
+	public function __construct(
+		Cache_Store $store,
+		Auto_Discovery $discovery,
+		Class_Inspector $inspector,
+		array $autowiring_paths,
+		string $base_path,
+		string $environment = 'development'
+	) {
+		$this->store            = $store;
+		$this->discovery        = $discovery;
+		$this->inspector        = $inspector;
+		$this->autowiring_paths = $autowiring_paths;
+		$this->base_path        = $base_path;
+		$this->environment      = $environment;
 	}
 
 	/**
@@ -54,11 +88,11 @@ class Cache_Manager {
 	 * @return array Cache array with 'classes' and 'bindings' sections.
 	 */
 	public function get_cache( string $scope_file, array $config_bindings = array() ): array {
-		if ( ! $this->compiler->exists() ) {
+		if ( ! $this->store->exists() ) {
 			return $this->rebuild_cache( $config_bindings );
 		}
 
-		$cached = $this->compiler->load();
+		$cached = $this->store->load();
 
 		if ( 'production' !== $this->environment ) {
 			return $this->update_if_stale( $cached, $scope_file, $config_bindings );
@@ -75,40 +109,36 @@ class Cache_Manager {
 	/**
 	 * Update cache if any files are stale
 	 *
-	 * @param array  $cached      Current cached data (classes and bindings).
-	 * @param string $scope_file  Path to scope file.
+	 * @param array  $cached          Current cached data (classes and bindings).
+	 * @param string $scope_file      Path to scope file.
 	 * @param array  $config_bindings Config bindings from wpdi-config.php.
 	 * @return array Updated cache array with 'classes' and 'bindings' sections.
 	 */
 	private function update_if_stale( array $cached, string $scope_file, array $config_bindings ): array {
-		$class_map = $cached['classes'] ?? array();
-
-		// Invalid cache format? Full rebuild
-		if ( empty( $class_map ) ) {
-			$this->compiler->delete();
-
-			return $this->rebuild_cache( $config_bindings );
-		}
-
-		// Scope file changed? Full rebuild
-		$cache_time = $this->compiler->get_mtime();
-		if ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time ) {
-			$this->compiler->delete();
-
-			return $this->rebuild_cache( $config_bindings );
-		}
-
-		// Config file changed? Full rebuild
+		$class_map   = $cached['classes'] ?? array();
+		$cache_time  = $this->store->get_mtime();
 		$config_file = $this->base_path . '/wpdi-config.php';
-		if ( file_exists( $config_file ) && filemtime( $config_file ) > $cache_time ) {
-			$this->compiler->delete();
+
+		$needs_full_rebuild =
+			// Corrupt or empty cache — no class map to update incrementally.
+			empty( $class_map )
+			// Scope file changed — constructor wiring or autowiring_paths may differ.
+			|| ( file_exists( $scope_file ) && filemtime( $scope_file ) > $cache_time )
+			// Config file changed — interface bindings may have changed.
+			|| ( file_exists( $config_file ) && filemtime( $config_file ) > $cache_time );
+
+		if ( $needs_full_rebuild ) {
+			$this->store->delete();
 
 			return $this->rebuild_cache( $config_bindings );
 		}
 
 		$updated_classes = $this->incremental_update( $class_map, $config_bindings );
 
-		return array( 'classes' => $updated_classes, 'bindings' => $config_bindings );
+		return array(
+			'classes'  => $updated_classes,
+			'bindings' => $config_bindings,
+		);
 	}
 
 	/**
@@ -122,28 +152,28 @@ class Cache_Manager {
 		$needs_update = false;
 		$updated_map  = array();
 
-		// Check each cached class for staleness
+		// Check each cached class for staleness.
 		foreach ( $cached_map as $class => $metadata ) {
-			// Invalid metadata format? Full rebuild
+			// Invalid metadata format? Full rebuild.
 			if ( ! is_array( $metadata ) || ! isset( $metadata['path'], $metadata['mtime'] ) ) {
-				$this->compiler->delete();
+				$this->store->delete();
 
 				return $this->rebuild_cache( $config_bindings )['classes'];
 			}
 
 			$file_path = $metadata['path'];
 
-			// File deleted/renamed? Skip (don't re-add)
+			// File deleted/renamed? Skip (don't re-add).
 			if ( ! file_exists( $file_path ) ) {
 				$needs_update = true;
 				continue;
 			}
 
-			// File modified? Re-parse it
+			// File modified? Re-parse it.
 			if ( filemtime( $file_path ) > $metadata['mtime'] ) {
-				$parsed_classes = $this->reparse_file( $file_path );
+				$parsed_classes = $this->discovery->parse_file( $file_path );
 
-				// Add all classes found in the file (handles renames/additions)
+				// Add all classes found in the file (handles renames/additions).
 				foreach ( $parsed_classes as $parsed_class => $parsed_metadata ) {
 					$updated_map[ $parsed_class ] = $parsed_metadata;
 				}
@@ -152,16 +182,16 @@ class Cache_Manager {
 				continue;
 			}
 
-			// File unchanged, keep cached
+			// File unchanged, keep cached.
 			$updated_map[ $class ] = $metadata;
 		}
 
-		// Discover NEW dependencies from modified/existing classes
+		// Discover NEW dependencies from modified/existing classes.
 		$updated_map = $this->discover_new_dependencies( $updated_map );
 
-		// Write updated cache if anything changed
+		// Write updated cache if files changed or new classes were discovered.
 		if ( $needs_update || count( $updated_map ) !== count( $cached_map ) ) {
-			$this->compiler->write( $updated_map, $config_bindings );
+			$this->store->write( $updated_map, $config_bindings );
 		}
 
 		return $updated_map;
@@ -176,31 +206,24 @@ class Cache_Manager {
 	private function rebuild_cache( array $config_bindings = array() ): array {
 		$class_map = array();
 
-		// Discover classes from each autowiring path
+		// Discover classes from each autowiring path.
 		foreach ( $this->autowiring_paths as $path ) {
 			if ( ! is_dir( $path ) ) {
-				continue; // Skip non-existent paths silently
+				continue; // Skip non-existent paths silently.
 			}
 
 			$discovered = $this->discovery->discover( $path );
 
-			// Merge with existing, later paths override earlier ones
+			// Merge with existing, later paths override earlier ones.
 			$class_map = array_merge( $class_map, $discovered );
 		}
 
-		$this->compiler->write( $class_map, $config_bindings );
+		$this->store->write( $class_map, $config_bindings );
 
-		return array( 'classes' => $class_map, 'bindings' => $config_bindings );
-	}
-
-	/**
-	 * Re-parse a single PHP file
-	 *
-	 * @param string $file_path Path to PHP file.
-	 * @return array Class map for this file.
-	 */
-	private function reparse_file( string $file_path ): array {
-		return $this->discovery->parse_file( $file_path );
+		return array(
+			'classes'  => $class_map,
+			'bindings' => $config_bindings,
+		);
 	}
 
 	/**
@@ -212,7 +235,7 @@ class Cache_Manager {
 	private function discover_new_dependencies( array $class_map ): array {
 		$to_check = $class_map;
 
-		// Iteratively discover dependencies until no new ones found
+		// Iteratively discover dependencies until no new ones found.
 		while ( ! empty( $to_check ) ) {
 			$new_deps = array();
 
@@ -222,13 +245,13 @@ class Cache_Manager {
 				}
 
 				foreach ( $metadata['dependencies'] as $dep ) {
-					// Skip if already in map or not a class
+					// Skip if already in map or not a class.
 					if ( isset( $class_map[ $dep ] ) || ! class_exists( $dep ) ) {
 						continue;
 					}
 
-					// Discover this new dependency
-					$dep_metadata = $this->discover_single_class( $dep );
+					// Discover this new dependency.
+					$dep_metadata = $this->inspector->get_metadata( $dep );
 					if ( $dep_metadata ) {
 						$class_map[ $dep ] = $dep_metadata;
 						$new_deps[ $dep ]  = $dep_metadata;
@@ -242,13 +265,4 @@ class Cache_Manager {
 		return $class_map;
 	}
 
-	/**
-	 * Discover metadata for a single class
-	 *
-	 * @param string $class_name Fully qualified class name (must exist).
-	 * @return array|null Metadata array or null if not discoverable.
-	 */
-	private function discover_single_class( string $class_name ): ?array {
-		return $this->discovery->get_class_metadata( $class_name );
-	}
 }

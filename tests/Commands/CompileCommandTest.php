@@ -316,6 +316,120 @@ PHP;
 	}
 
 	/**
+	 * Get format_items call from WP_CLI tracked calls
+	 */
+	private function getFormatItemsCall(): ?array {
+		foreach ( WP_CLI::get_calls() as $call ) {
+			if ( 'format_items' === $call['method'] ) {
+				return $call;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * GIVEN a valid module directory with classes
+	 * WHEN compiling with --format=json
+	 * THEN should output structured JSON with classes and bindings
+	 */
+	public function test_json_format_outputs_structured_data(): void {
+		$this->createTestClass( 'Test_Service' );
+
+		$command = new Compile_Command();
+
+		ob_start();
+		$command->__invoke(
+			array(),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+		$output = ob_get_clean();
+
+		$data = json_decode( $output, true );
+		$this->assertNotNull( $data, 'Output should be valid JSON' );
+		$this->assertArrayHasKey( 'classes', $data );
+		$this->assertArrayHasKey( 'bindings', $data );
+		$this->assertCount( 1, $data['classes'] );
+		$this->assertEquals( 'Test_Service', $data['classes'][0]['class'] );
+		$this->assertEmpty( $data['bindings'] );
+
+		// Cache should still be written.
+		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
+		$this->assertFileExists( $cache_file );
+
+		// No visual output should be produced.
+		$logs         = $this->getWpCliCalls( 'log' );
+		$success_calls = $this->getWpCliCalls( 'success' );
+		$this->assertEmpty( $logs );
+		$this->assertEmpty( $success_calls );
+	}
+
+	/**
+	 * GIVEN a module with classes and config
+	 * WHEN compiling with --format=json
+	 * THEN should include bindings in structured output
+	 */
+	public function test_json_format_includes_config_bindings(): void {
+		$this->createTestClass( 'Test_Service' );
+
+		$config_content = <<<'PHP'
+<?php
+return array(
+	'Logger_Interface' => 'Array_Logger',
+);
+PHP;
+		file_put_contents( $this->temp_dir . '/wpdi-config.php', $config_content );
+
+		$command = new Compile_Command();
+
+		ob_start();
+		$command->__invoke(
+			array(),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+		$output = ob_get_clean();
+
+		$data = json_decode( $output, true );
+		$this->assertCount( 1, $data['bindings'] );
+		$this->assertEquals( 'Logger_Interface', $data['bindings'][0]['class'] );
+		$this->assertEquals( 'Array_Logger', $data['bindings'][0]['binding'] );
+	}
+
+	/**
+	 * GIVEN a valid module directory with classes
+	 * WHEN compiling with --format=csv
+	 * THEN should output combined rows via format_items
+	 */
+	public function test_csv_format_outputs_combined_rows(): void {
+		$this->createTestClass( 'Test_Service' );
+
+		$command = new Compile_Command();
+		$command->__invoke(
+			array(),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'csv',
+			)
+		);
+
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call, 'format_items should be called' );
+		$this->assertEquals( 'csv', $format_call['args'][0] );
+		$this->assertCount( 1, $format_call['args'][1] );
+		$this->assertEquals( 'classes', $format_call['args'][1][0]['section'] );
+
+		// Cache should still be written.
+		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
+		$this->assertFileExists( $cache_file );
+	}
+
+	/**
 	 * Create a test class file and load it
 	 *
 	 * Creates a PHP file with a simple class definition and requires it

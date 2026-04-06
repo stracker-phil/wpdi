@@ -129,8 +129,8 @@ class ListCommandTest extends TestCase {
 		$this->assertEquals( array(
 			'class',
 			'type',
-			'autowirable',
-			'source',
+			'binding',
+			'mapped',
 		), $format_call['args'][2], 'Should include all required fields' );
 	}
 
@@ -199,16 +199,16 @@ class ListCommandTest extends TestCase {
 			array( 'dir' => $this->temp_dir )
 		);
 
-		// Verify log was called
+		// Verify the "no results" summary line was logged.
 		$log_calls = $this->getWpCliCalls( 'log' );
 		$this->assertCount( 1, $log_calls );
-		$this->assertStringContainsString( 'No services found', $log_calls[0]['args'][0] );
+		$this->assertStringContainsString( 'no results', $log_calls[0]['args'][0] );
 	}
 
 	/**
 	 * GIVEN concrete, interface, and abstract classes
 	 * WHEN listing
-	 * THEN should identify class types and autowirability correctly
+	 * THEN should identify class types correctly
 	 */
 	public function test_identifies_class_metadata_correctly(): void {
 		// Create different class types
@@ -227,7 +227,6 @@ class ListCommandTest extends TestCase {
 		// Only concrete class should be listed (Auto_Discovery filters out interfaces/abstracts)
 		$this->assertStringContainsString( 'Concrete_Service', $output, 'Should contain concrete class' );
 		$this->assertStringContainsString( 'class', $output, 'Class type should be class' );
-		$this->assertStringContainsString( 'yes', $output, 'Concrete class should be autowirable' );
 		$this->assertStringNotContainsString( 'Service_Interface', $output, 'Should not list interfaces' );
 		$this->assertStringNotContainsString( 'Abstract_Service', $output, 'Should not list abstract classes' );
 	}
@@ -259,9 +258,9 @@ class ListCommandTest extends TestCase {
 	/**
 	 * GIVEN classes in src/ and entries in wpdi-config.php
 	 * WHEN listing
-	 * THEN should show both with correct source values
+	 * THEN should show both with binding and mapped columns
 	 */
-	public function test_includes_config_entries_with_source_column(): void {
+	public function test_includes_config_entries_with_binding_columns(): void {
 		// Create a discovered class
 		$this->createTestClass( 'My_Service' );
 
@@ -282,11 +281,12 @@ PHP;
 
 		$output = $this->getLogOutput();
 
-		// Should contain both discovered and configured services
+		// Should contain both discovered and configured services.
 		$this->assertStringContainsString( 'My_Service', $output, 'Should include discovered class' );
 		$this->assertStringContainsString( 'Logger_Interface', $output, 'Should include configured service' );
-		$this->assertStringContainsString( 'src', $output, 'Should show src source' );
-		$this->assertStringContainsString( 'config', $output, 'Should show config source' );
+		// Config entry should show binding detail.
+		$this->assertStringContainsString( 'default', $output, 'Should show binding key' );
+		$this->assertStringContainsString( 'stdClass', $output, 'Should show mapped class' );
 	}
 
 	/**
@@ -330,9 +330,30 @@ PHP;
 			)
 		);
 
+		// result_meta() outputs the filter line + blank line, then results_found()
+		// outputs the "no results" summary. Verify the summary is present.
 		$log_calls = $this->getWpCliCalls( 'log' );
-		$this->assertCount( 1, $log_calls );
-		$this->assertStringContainsString( 'No services found', $log_calls[0]['args'][0] );
+		$last_call = end( $log_calls );
+		$this->assertStringContainsString( 'no results', $last_call['args'][0] );
+	}
+
+	/**
+	 * GIVEN classes in src/
+	 * WHEN listing
+	 * THEN should create a cache file as a side effect (via Cache_Manager)
+	 */
+	public function test_creates_cache_file_via_cache_manager(): void {
+		$this->createTestClass( 'Cache_Side_Effect_Service' );
+
+		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
+		$this->assertFileDoesNotExist( $cache_file, 'Precondition: no cache yet' );
+
+		$command = new List_Command();
+		$command->__invoke( array(), array( 'dir' => $this->temp_dir ) );
+
+		$output = $this->getLogOutput();
+		$this->assertStringContainsString( 'Cache_Side_Effect_Service', $output );
+		$this->assertFileExists( $cache_file, 'Cache_Manager should create cache file' );
 	}
 
 	/**

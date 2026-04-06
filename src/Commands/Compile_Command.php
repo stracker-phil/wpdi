@@ -1,12 +1,14 @@
 <?php
 /**
- * WP-CLI command for compiling WPDI container cache
+ * WP-CLI command for compiling WPDI container cache.
+ *
+ * @package WPDI\Commands
  */
 
 namespace WPDI\Commands;
 
 use WPDI\Auto_Discovery;
-use WPDI\Compiler;
+use WPDI\Cache_Store;
 
 /**
  * Compile WPDI container for production performance
@@ -30,7 +32,7 @@ class Compile_Command extends Command {
 	 * : Force recompilation even if cache exists
 	 *
 	 * [--format=<format>]
-	 * : Output format: ascii uses +/- borders instead of box-drawing characters
+	 * : Output format: table (default), ascii, json, yaml, csv
 	 *
 	 * ## EXAMPLES
 	 *
@@ -48,21 +50,22 @@ class Compile_Command extends Command {
 			$this->error( "Directory does not exist: {$path}" );
 		}
 
-		$compiler = new Compiler( $path );
+		$store = new Cache_Store( $path );
 
-		// Check cache directory is writable before doing any work
-		if ( ! $compiler->ensure_dir() ) {
+		// Check cache directory is writable before doing any work.
+		if ( ! $store->ensure_dir() ) {
 			$this->error( "Cache directory is not writable: {$path}/cache\nEnsure the directory exists and has write permissions." );
 		}
 
-		if ( $compiler->exists() && ! $force ) {
+		if ( $store->exists() && ! $force ) {
 			$this->warning( 'Cache file already exists. Use --force to overwrite.' );
 
 			return;
 		}
 
-		$discovery = new Auto_Discovery();
-		$classes   = array();
+		$discovery      = new Auto_Discovery();
+		$classes        = array();
+		$all_class_rows = array();
 
 		// Discover from each autowiring path and render a table per source.
 		foreach ( $autowiring_paths as $autowiring_path ) {
@@ -83,28 +86,36 @@ class Compile_Command extends Command {
 					'class' => $class,
 				);
 			}
+			$all_class_rows = array_merge( $all_class_rows, $rows );
 
-			$this->table(
-				$rows,
-				array( 'type', 'class' ),
-				array(
-					'type'  => 'type_label',
-					'class' => 'class_name',
-				),
-				"/$autowiring_path"
-			);
+			if ( ! $this->is_data_format() ) {
+				$this->table(
+					$rows,
+					array( 'type', 'class' ),
+					array(
+						'type'  => 'type_label',
+						'class' => 'class_name',
+					),
+					"/$autowiring_path"
+				);
+			}
 		}
 
-		$this->results_found( $classes, 'discovered 1 class', 'discovered %d classes', 'no classes found to compile' );
+		if ( ! $this->is_data_format() ) {
+			$this->results_found( $classes, 'discovered 1 class', 'discovered %d classes', 'no classes found to compile' );
+		}
 		if ( empty( $classes ) ) {
 			return;
 		}
-		$this->log( '' );
+		if ( ! $this->is_data_format() ) {
+			$this->log( '' );
+		}
 
-		// Check for manual configuration
-		$config_file    = $path . '/wpdi-config.php';
-		$config         = array();
-		$manual_configs = array();
+		// Check for manual configuration.
+		$config_file     = $path . '/wpdi-config.php';
+		$config          = array();
+		$manual_configs  = array();
+		$all_config_rows = array();
 		if ( file_exists( $config_file ) ) {
 			$config         = require $config_file;
 			$manual_configs = array_keys( $config );
@@ -130,7 +141,8 @@ class Compile_Command extends Command {
 			$separators = array();
 
 			foreach ( $config as $interface => $value ) {
-				$interface_type = $this->format_type_label( $this->inspector->get_type( $interface ) );
+				$interface_type =
+					$this->format_type_label( $this->inspector->get_type( $interface ) );
 
 				if ( is_array( $value ) ) {
 					// Contextual binding: one row per param entry.
@@ -163,27 +175,83 @@ class Compile_Command extends Command {
 				}
 			}
 
-			$this->table(
-				$rows,
-				array( 'type', 'class', 'param', 'binding' ),
-				array(
-					'type'    => 'type_label',
-					'class'   => 'class_name',
-					'param'   => 'param',
-					'binding' => 'class_binding',
-				),
-				'/wpdi-config.php',
-				$separators
-			);
-		}
-		$this->results_found( $manual_configs, 'found 1 manual config', 'found %d manual configs', '' );
-		$this->log( '' );
+			$all_config_rows = $rows;
 
-		if ( $compiler->write( $classes, $config ) ) {
-			$this->success( 'Container compiled to: ' . $compiler->get_cache_file() );
+			if ( ! $this->is_data_format() ) {
+				$this->table(
+					$rows,
+					array( 'type', 'class', 'param', 'binding' ),
+					array(
+						'type'    => 'type_label',
+						'class'   => 'class_name',
+						'param'   => 'param',
+						'binding' => 'class_binding',
+					),
+					'/wpdi-config.php',
+					$separators
+				);
+			}
+		}
+		if ( ! $this->is_data_format() ) {
+			$this->results_found( $manual_configs, 'found 1 manual config', 'found %d manual configs', '' );
+			$this->log( '' );
+		}
+
+		if ( $store->write( $classes, $config ) ) {
+			if ( $this->is_data_format() ) {
+				$this->output_compile_data( $all_class_rows, $all_config_rows );
+			} else {
+				$this->success( 'Container compiled to: ' . $store->get_cache_file() );
+			}
 		} else {
 			$this->error( 'Failed to compile container cache' );
 		}
+	}
+
+	/**
+	 * Output compiled data in machine-readable format.
+	 *
+	 * @param array $class_rows  Discovered class rows.
+	 * @param array $config_rows Config binding rows.
+	 */
+	private function output_compile_data( array $class_rows, array $config_rows ): void {
+		if ( 'json' === $this->format ) {
+			echo wp_json_encode(
+				array(
+					'classes'  => $class_rows,
+					'bindings' => $config_rows,
+				)
+			) . "\n";
+
+			return;
+		}
+
+		// csv/yaml: combined flat rows with section discriminator.
+		$combined = array();
+
+		foreach ( $class_rows as $row ) {
+			$combined[] = array(
+				'section'      => 'classes',
+				'type'         => $row['type'],
+				'class'        => $row['class'],
+				'param'        => '',
+				'binding_type' => '',
+				'binding'      => '',
+			);
+		}
+
+		foreach ( $config_rows as $row ) {
+			$combined[] = array(
+				'section'      => 'bindings',
+				'type'         => $row['type'],
+				'class'        => $row['class'],
+				'param'        => $row['param'],
+				'binding_type' => $row['binding_type'],
+				'binding'      => $row['binding'],
+			);
+		}
+
+		$this->format_items( $combined, array( 'section', 'type', 'class', 'param', 'binding_type', 'binding' ) );
 	}
 
 }

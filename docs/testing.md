@@ -77,14 +77,6 @@ class Plugin_Integration_Test extends WP_UnitTestCase {
                 'default'   => Test_File_Cache::class,
             ),
         ) );
-
-        // Create a temporary scope file for testing
-        $scope_file = plugin_dir_path( __FILE__ ) . 'test-scope.php';
-        file_put_contents( $scope_file, '<?php' );
-
-        $this->container->initialize( $scope_file );
-
-        unlink( $scope_file );
     }
 
     public function test_full_workflow(): void {

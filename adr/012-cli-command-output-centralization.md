@@ -46,8 +46,17 @@ methods to produce output. Changing a rendering method in `Command` affects all 
   strings (`├── ` / `└── ` / `│   ` / `    `) in Unicode mode, or their ASCII equivalents
   (`+-- ` / `|   `) when `$this->ascii` is set. Used by `Inspect_Command::collect_tree_rows()`.
 
+- **`get_constructor_param_map(string $class_name)`** — returns only class/interface-typed
+  constructor parameters (used by `depends` for reverse-dependency lookups).
+
+- **`get_full_param_map(string $class_name)`** — returns all constructor parameters including
+  built-in types (`string`, `bool`, `array`, `callable`, etc.) and untyped params (`mixed`).
+  Each entry is `['type' => string, 'builtin' => bool]`. Used by `inspect` to show the complete
+  constructor signature; built-in types render as red `builtin` leaf nodes in the dependency tree.
+
 - **`format_class_name`, `get_short_class_name`, `get_namespace`, `format_type_label`,
   `get_type_color`, `parse_autowiring_paths`** — shared FQCN utilities and type helpers.
+  `get_type_color()` maps `'builtin'` to `%r` (red) to flag non-autowirable parameters.
 
 - A shared `Class_Inspector $inspector` instance initialized in `__construct()` so commands need
   no constructor of their own.

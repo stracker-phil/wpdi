@@ -13,6 +13,6 @@ Most WordPress DI setups require verbose configuration. For concrete classes wit
 ## Consequences
 
 - Plugin authors add classes to `src/` and they "just work"
-- Reflection overhead mitigated by metadata caching (`Compiler`)
+- Reflection overhead mitigated by metadata caching (`Cache_Store`)
 - Only concrete, instantiable classes are discovered (traits, interfaces, abstracts excluded)
 - Interface bindings still require explicit configuration

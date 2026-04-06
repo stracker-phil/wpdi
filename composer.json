@@ -40,7 +40,7 @@
   "scripts": {
     "test": "phpunit",
     "coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html coverage --coverage-clover coverage/report.xml",
-    "cs": "phpcs --standard=WordPress src/",
-    "cs-fix": "phpcbf --standard=WordPress src/"
+    "cs": "phpcs",
+    "cs-fix": "phpcbf"
   }
 }

@@ -125,7 +125,7 @@ class InspectCommandTest extends TestCase {
 	/**
 	 * GIVEN a class with only scalar parameters
 	 * WHEN inspecting
-	 * THEN should show single-row tree with no children
+	 * THEN should show built-in types as leaf nodes with 'builtin' type label
 	 */
 	public function test_inspects_class_with_scalar_defaults(): void {
 		$command = new Inspect_Command();
@@ -138,8 +138,11 @@ class InspectCommandTest extends TestCase {
 		$output = $this->getLogOutput();
 
 		$this->assertStringContainsString( 'ClassWithDefaultValue', $output );
-		$this->assertStringNotContainsString( "\xE2\x94\x9C", $output );
-		$this->assertStringNotContainsString( "\xE2\x94\x94", $output );
+		$this->assertStringContainsString( '$name', $output );
+		$this->assertStringContainsString( '$count', $output );
+		$this->assertStringContainsString( 'builtin', $output );
+		$this->assertStringContainsString( 'string', $output );
+		$this->assertStringContainsString( 'int', $output );
 	}
 
 	/**
@@ -427,6 +430,152 @@ class InspectCommandTest extends TestCase {
 			array( 'NonexistentShortName' ),
 			array( 'dir' => $this->temp_dir )
 		);
+	}
+
+	/**
+	 * Get format_items call from WP_CLI tracked calls
+	 */
+	private function getFormatItemsCall(): ?array {
+		foreach ( WP_CLI::get_calls() as $call ) {
+			if ( 'format_items' === $call['method'] ) {
+				return $call;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * GIVEN a class with a dependency
+	 * WHEN inspecting with --format=json
+	 * THEN should output hierarchical JSON with nested dependencies
+	 */
+	public function test_json_format_outputs_hierarchical_tree(): void {
+		$command = new Inspect_Command();
+
+		ob_start();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithDependency' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+		$output = ob_get_clean();
+
+		$data = json_decode( $output, true );
+		$this->assertNotNull( $data, 'Output should be valid JSON' );
+		$this->assertEquals( 'WPDI\\Tests\\Fixtures\\ClassWithDependency', $data['class'] );
+		$this->assertEquals( 'class', $data['type'] );
+		$this->assertArrayHasKey( 'dependencies', $data );
+		$this->assertCount( 1, $data['dependencies'] );
+		$this->assertEquals( '$dependency', $data['dependencies'][0]['param'] );
+		$this->assertEquals( 'WPDI\\Tests\\Fixtures\\SimpleClass', $data['dependencies'][0]['class'] );
+		$this->assertEquals( 'class', $data['dependencies'][0]['type'] );
+
+		// No visual output should be produced.
+		$logs = $this->getWpCliCalls( 'log' );
+		$this->assertEmpty( $logs );
+	}
+
+	/**
+	 * GIVEN a class with chained dependencies
+	 * WHEN inspecting with --format=json and --depth=1
+	 * THEN should limit depth of nested dependencies
+	 */
+	public function test_json_format_respects_depth_limit(): void {
+		$command = new Inspect_Command();
+
+		ob_start();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithChainedDependency' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+				'depth'  => '1',
+			)
+		);
+		$output = ob_get_clean();
+
+		$data = json_decode( $output, true );
+		$this->assertCount( 1, $data['dependencies'] );
+		$this->assertEmpty( $data['dependencies'][0]['dependencies'] );
+	}
+
+	/**
+	 * GIVEN circular dependencies
+	 * WHEN inspecting with --format=json
+	 * THEN should mark circular nodes with circular flag
+	 */
+	public function test_json_format_marks_circular_dependencies(): void {
+		$command = new Inspect_Command();
+
+		ob_start();
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\CircularA' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'json',
+			)
+		);
+		$output = ob_get_clean();
+
+		$data = json_decode( $output, true );
+		// CircularA -> CircularB -> CircularA [CIRCULAR].
+		$deps     = $data['dependencies'];
+		$sub_deps = $deps[0]['dependencies'];
+		$this->assertCount( 1, $sub_deps );
+		$this->assertTrue( $sub_deps[0]['circular'] );
+	}
+
+	/**
+	 * GIVEN a class with a dependency
+	 * WHEN inspecting with --format=csv
+	 * THEN should output flat rows via format_items
+	 */
+	public function test_csv_format_outputs_flat_rows(): void {
+		$command = new Inspect_Command();
+
+		$command->__invoke(
+			array( 'WPDI\\Tests\\Fixtures\\ClassWithDependency' ),
+			array(
+				'dir'    => $this->temp_dir,
+				'format' => 'csv',
+			)
+		);
+
+		$format_call = $this->getFormatItemsCall();
+		$this->assertNotNull( $format_call, 'format_items should be called' );
+		$this->assertEquals( 'csv', $format_call['args'][0] );
+		// Root + 1 dependency = 2 rows.
+		$this->assertCount( 2, $format_call['args'][1] );
+		$this->assertEquals( array( 'depth', 'param', 'type', 'class' ), $format_call['args'][2] );
+
+		// No visual output should be produced.
+		$logs = $this->getWpCliCalls( 'log' );
+		$this->assertEmpty( $logs );
+	}
+
+	/**
+	 * GIVEN classes in src/
+	 * WHEN inspecting
+	 * THEN should create a cache file as a side effect (via Cache_Manager)
+	 */
+	public function test_creates_cache_via_cache_manager(): void {
+		$this->createTestClass( 'Inspect_Cache_Service' );
+
+		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
+		$this->assertFileDoesNotExist( $cache_file, 'Precondition: no cache yet' );
+
+		$command = new Inspect_Command();
+		$command->__invoke(
+			array( 'Inspect_Cache_Service' ),
+			array( 'dir' => $this->temp_dir )
+		);
+
+		$output = $this->getLogOutput();
+		$this->assertStringContainsString( 'Inspect_Cache_Service', $output );
+		$this->assertFileExists( $cache_file, 'Cache_Manager should create cache file' );
 	}
 
 	/**

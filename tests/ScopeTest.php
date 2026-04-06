@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use WPDI\Tests\Fixtures\TestScope;
 use WPDI\Tests\Fixtures\SimpleClass;
 use WPDI\Tests\Fixtures\ClassWithDependency;
+use WPDI\Exceptions\Container_Exception;
 
 /**
  * @covers \WPDI\Scope
@@ -237,6 +238,34 @@ class ScopeTest extends TestCase {
 		TestScope::boot( __FILE__ );
 
 		$this->assertTrue( true, 'TestScope unaffected by clearing a different class' );
+	}
+
+	// ========================================
+	// Error Handling Tests
+	// ========================================
+
+	/**
+	 * GIVEN a Scope subclass whose bootstrap() throws a WPDI_Exception
+	 * WHEN boot() is called
+	 * THEN wp_die() is called with the escaped error message
+	 */
+	public function test_boot_catches_wpdi_exception_and_calls_wp_die(): void {
+		// wp_die mock throws RuntimeException (see bootstrap.php).
+		$this->expectException( \RuntimeException::class );
+
+		$scope_class = new class() extends \WPDI\Scope {
+			public function __construct( string $scope_file = '' ) {
+				if ( '' !== $scope_file ) {
+					parent::__construct( $scope_file );
+				}
+			}
+
+			protected function bootstrap( \WPDI\Resolver $resolver ): void {
+				throw new Container_Exception( 'Test error from bootstrap' );
+			}
+		};
+
+		$scope_class::boot( __FILE__ );
 	}
 
 	// ========================================

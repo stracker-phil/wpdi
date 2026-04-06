@@ -3,7 +3,10 @@
     <description>WordPress Coding Standards for WPDI</description>
 
     <!-- Include WordPress Coding Standards -->
-    <rule ref="WordPress"/>
+    <rule ref="WordPress">
+        <exclude name="Generic.Functions.CallTimePassByReference"/>
+        <exclude name="Squiz.WhiteSpace.LanguageConstructSpacing"/>
+    </rule>
 
     <!-- Check all PHP files -->
     <file>src/</file>
@@ -14,6 +17,42 @@
 
     <!-- Allow PSR-4 autoloader file names -->
     <rule ref="WordPress.Files.FileName">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Don't require @param tags when the type hint is self-documenting -->
+    <rule ref="Squiz.Commenting.FunctionComment.MissingParamTag">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Allow multiple @throws tags -->
+    <rule ref="Squiz.Commenting.FunctionCommentThrowTag.WrongNumber">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Allow @ error suppression (intentional for filesystem ops) -->
+    <rule ref="WordPress.PHP.NoSilencedErrors">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Allow file_get_contents/file_put_contents for local file I/O -->
+    <rule ref="WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents">
+        <severity>0</severity>
+    </rule>
+
+    <!-- var_export is used to generate the cache file, not for debugging -->
+    <rule ref="WordPress.PHP.DevelopmentFunctions.error_log_var_export">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Allow code-like inline comments (common in explanatory docblocks) -->
+    <rule ref="Squiz.PHP.CommentedOutCode.Found">
         <severity>0</severity>
     </rule>
 

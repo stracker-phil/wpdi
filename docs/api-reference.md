@@ -39,14 +39,16 @@ if ( $container->has( Optional_Service::class ) ) {
 }
 ```
 
-### initialize(string $scope_file): void
+### load_compiled(array $cache): void
 
-Initialize with auto-discovery and caching.
+Load compiled cache — registers interface bindings. Concrete classes are autowired on demand when first requested via `get()`.
 
 ```php
 $container = new WPDI\Container();
-$container->initialize( __FILE__ );
+$container->load_compiled( $cache );
 ```
+
+> **Note:** You rarely call this directly. `Scope::boot()` handles container initialization automatically, including cache management and config loading.
 
 ### bind_contextual(string $abstract, array $bindings): void
 
