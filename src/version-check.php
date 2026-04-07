@@ -8,7 +8,7 @@
  * @package WPDI
  */
 
-$module_version = '1.1.1';
+$module_version = '1.2.0';
 
 if ( ! defined( 'WPDI_VERSION' ) ) {
 	define( 'WPDI_VERSION', $module_version );
