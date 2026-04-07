@@ -1,0 +1,190 @@
+{
+  "repo_notes": [
+    {
+      "content": "WPDI is a lightweight, WordPress-native PSR-11 dependency injection container with zero-config autowiring and production-optimized caching. It is designed for WordPress plugins and themes that want clean DI without pulling in a heavyweight framework.\n\nKEY ARCHITECTURAL DECISIONS TO RESPECT:\n- There is NO class called Compiler. Cache file I/O is handled by Cache_Store; staleness detection and incremental updates are handled by Cache_Manager. Never refer to a 'Compiler'.\n- Container is a pure resolver. It has NO initialize() method. Bootstrap orchestration (wiring Cache_Store, Class_Inspector, Auto_Discovery, Cache_Manager, loading config, feeding compiled cache to Container, then calling bootstrap(Resolver)) all lives in Scope::__construct().\n- Scope::boot(__FILE__) is the only external entry point. The constructor is protected. boot() is idempotent — duplicate calls for the same class are no-ops.\n- Scope::clear() is for test teardown only (called in tearDown() via TestScope::clear()). Never mention it in user-facing documentation as a normal API.\n- Services are singletons by default — cached after first resolution. Do not pass get_option() to constructors; use method-level calls.\n- wpdi-config.php accepts only static class-name strings and contextual arrays of strings. Closures, objects, and callables are explicitly rejected (Compile_Command validates this and aborts with an error).\n- PHP 7.4+ only. No mixed types, nullsafe ?->, match expressions, union types, or named arguments anywhere in the codebase.\n- WordPress coding standards: tabs for indentation, Snake_Case classes, snake_case methods. Always use 'use' imports — never inline FQNs in implementation code.\n- WP-CLI commands (list, inspect, depends) load cache via load_module_cache() which always passes 'development' as the environment — never wp_get_environment_type() — so staleness checks always run in CLI context. ADR-015 documents the rationale.\n- The compile command (Compile_Command) is the only WP-CLI command that does standalone discovery (Auto_Discovery + Cache_Store directly). All other commands load from cache via Cache_Manager.\n\nDIRECTORY OVERVIEW:\n- src/ — all library source (Container.php, Scope.php, Resolver.php, Auto_Discovery.php, Class_Inspector.php, Cache_Store.php, Cache_Manager.php, version-check.php, Commands/, Exceptions/)\n- tests/ — PHPUnit 9.6 tests; tests/bootstrap.php stubs WordPress functions; tests/Fixtures/ holds sample classes (circular deps, nullable params, etc.); tests/Commands/ holds WP-CLI command tests\n- adr/ — Architectural Decision Records (ADR-001 through ADR-015) — read these before contradicting a design choice\n- docs/ — user-facing documentation\n- cache/ — generated at runtime; cache/wpdi-container.php is the compiled artifact (gitignored)\n\nEXCEPTION HIERARCHY: WPDI_Exception > Container_Exception (PSR-11) > Not_Found_Exception / Circular_Dependency_Exception\n\nCACHE FILE FORMAT: {classes: {class => [path, mtime, dependencies, constructor]}, bindings: {interface => class}}. The 'constructor' key is null (no constructor) or an array of param descriptors (name, type, builtin, nullable, default). Old flat-format caches are auto-migrated on load by Cache_Store."
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "High-level introduction to WPDI — what it is, why it exists, its core philosophy, and how the major subsystems fit together. Links to child pages for deeper coverage."
+    },
+    {
+      "title": "Getting Started",
+      "purpose": "Step-by-step guide for installing WPDI via Composer, creating a first plugin with a Scope subclass, and understanding the basic project layout. Covers the minimal plugin template, the src/ directory convention, and the App::boot(__FILE__) entry point.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "The entry point is always App::boot(__FILE__) — a static method on the user's Scope subclass. Never show 'new App()' or any direct constructor call; the constructor is protected. The boot() call is safe to place directly in the plugin file because it is idempotent."
+        }
+      ]
+    },
+    {
+      "title": "Design Decisions & ADRs",
+      "purpose": "Summary of the architectural decisions that shaped WPDI: PHP 7.4 minimum, PSR-11 compliance, WordPress coding standards, singleton-by-default, zero-config autowiring, composition root pattern, metadata caching, version conflict detection, no locked container after bootstrap, and the CLI cache-first strategy. References the adr/ directory for the full rationale behind each decision.",
+      "parent": "Overview"
+    },
+    {
+      "title": "WPDI vs. Modularity",
+      "purpose": "Comparison of WPDI against the Modularity framework: architectural philosophy, autowiring, type safety, IDE navigation, feature matrix, and migration paths. Helps teams choose the right tool.",
+      "parent": "Overview"
+    },
+    {
+      "title": "Core Architecture",
+      "purpose": "Overview of the main runtime components — Scope, Container, Resolver — and how they interact during the plugin lifecycle. Explains the boot sequence: Scope::boot() → Scope::__construct() (creates Cache_Store, Class_Inspector, Auto_Discovery, Cache_Manager; loads config; feeds compiled cache to Container) → bootstrap(Resolver) → container discarded. Links to child pages for each subsystem."
+    },
+    {
+      "title": "Scope: Plugin Entry Point",
+      "purpose": "Deep dive into WPDI\\Scope — the abstract base class that plugin authors extend. Covers boot() (idempotent static entry point), the protected constructor and its full bootstrap sequence, bootstrap(Resolver) as the composition root, autowiring_paths() and environment() overrides, and error handling via wp_die() / WP_CLI::error().",
+      "parent": "Core Architecture",
+      "page_notes": [
+        {
+          "content": "IMPORTANT: Scope::clear() is a test-only reset method. Do not document it as part of the normal API or suggest users call it in production code. It exists solely so test tearDown() methods can reset the singleton guard between test cases.\n\nThe constructor is protected — it cannot be called directly by plugin authors. App::boot(__FILE__) is the only sanctioned entry point. The second call to boot() for the same class is a silent no-op (idempotent guard via static $booted array).\n\nScope::__construct() owns the full bootstrap sequence in this order: creates Cache_Store, Class_Inspector, Auto_Discovery, Cache_Manager; loads wpdi-config.php; feeds the compiled cache to Container via load_compiled(); then calls bootstrap(Resolver). After bootstrap() returns, the container is not stored anywhere accessible — services communicate purely through constructor injection."
+        }
+      ]
+    },
+    {
+      "title": "Container: Service Registry & Resolution",
+      "purpose": "Detailed coverage of WPDI\\Container — PSR-11 implementation, the resolution pipeline (instance cache → explicit bindings → contextual bindings → autowiring), circular dependency detection via a $resolving stack, bind(), bind_contextual(), load_config(), and load_compiled(). Covers how compiled constructor descriptors in $class_constructors skip reflection at runtime.",
+      "parent": "Core Architecture",
+      "page_notes": [
+        {
+          "content": "The Container has NO initialize() method. It is a pure resolver. All bootstrap orchestration (cache loading, config loading, discovery) lives in Scope::__construct(), not in the Container.\n\nload_compiled() is called by Scope with the full cache array; it internally calls load_config() for the bindings section. Plugin authors do not call load_compiled() or load_config() directly.\n\nThe $resolving stack is cleaned up in a try-finally block to guarantee circular dependency detection state is consistent even when exceptions are thrown."
+        }
+      ]
+    },
+    {
+      "title": "Resolver: Limited Container API",
+      "purpose": "Explains WPDI\\Resolver — the read-only wrapper passed to bootstrap(). Covers why it exists (preventing service-locator anti-pattern outside the composition root), its get() and has() proxies, and why plugin code should never store or pass the Resolver beyond bootstrap().",
+      "parent": "Core Architecture"
+    },
+    {
+      "title": "Exception Hierarchy",
+      "purpose": "Documents the WPDI exception tree: WPDI_Exception (library base), Container_Exception (PSR-11 ContainerExceptionInterface), Not_Found_Exception (PSR-11 NotFoundExceptionInterface), and Circular_Dependency_Exception. Includes when each is thrown and how to catch them at the right level.",
+      "parent": "Core Architecture"
+    },
+    {
+      "title": "Configuration",
+      "purpose": "Overview of how WPDI is configured — zero-config autowiring for concrete classes and the optional wpdi-config.php for interface bindings and contextual bindings. Links to child pages for each mechanism."
+    },
+    {
+      "title": "wpdi-config.php: Interface Bindings",
+      "purpose": "Full reference for the wpdi-config.php configuration file: simple interface-to-concrete mappings (Interface::class => Concrete::class), contextual bindings (array keyed by $param_name with a 'default' fallback key), the strict static class-name-only format, and why closures and callables are explicitly disallowed. Explains how bindings are serialized into the compiled cache so the file is a complete deployable artifact.",
+      "parent": "Configuration",
+      "page_notes": [
+        {
+          "content": "wpdi-config.php must return a plain PHP array. Top-level values must be either a class-name string (simple binding) or an array of class-name strings keyed by parameter name (contextual binding). Closures, objects, and any other callable are rejected by Compile_Command with a hard error. This is intentional — the format must be serializable via var_export() for the compiled cache."
+        }
+      ]
+    },
+    {
+      "title": "Autowiring Paths & Auto-Discovery",
+      "purpose": "Explains how WPDI scans the filesystem for concrete classes using Auto_Discovery and PHP tokenization (no eval/include during discovery). Covers autowiring_paths() customization, multi-module structures, PSR-4 file naming requirements, PHP 8+ token compatibility (T_NAME_QUALIFIED alongside T_STRING/T_NS_SEPARATOR), and what classes are excluded (interfaces, abstracts, traits).",
+      "parent": "Configuration"
+    },
+    {
+      "title": "Caching & Performance",
+      "purpose": "Overview of WPDI's two-stage caching strategy: development mode uses Cache_Manager for incremental mtime-based updates; production uses a pre-compiled cache/wpdi-container.php artifact written by Cache_Store. Explains how compiled constructor descriptors eliminate reflection at runtime. Links to child pages for each subsystem.",
+      "page_notes": [
+        {
+          "content": "There is no class called 'Compiler' in this codebase. The concept formerly described as 'the compiler' is split between two classes: Cache_Store (file I/O — reads and writes cache/wpdi-container.php) and Cache_Manager (staleness logic — decides when to rebuild and coordinates Cache_Store writes). The WP-CLI 'compile' command is Compile_Command, which uses Auto_Discovery + Cache_Store directly."
+        }
+      ]
+    },
+    {
+      "title": "Cache_Store: Cache File I/O",
+      "purpose": "Deep dive into WPDI\\Cache_Store — how it writes cache/wpdi-container.php using var_export(), the cache file format ({classes: {class => [path, mtime, dependencies, constructor]}, bindings: {interface => class}}), constructor descriptor shape (name, type, builtin, nullable, default), old flat-format auto-migration on load, ensure_dir() filesystem resilience, and the automatic .gitignore creation. Cache_Store is the sole class that touches the cache file on disk.",
+      "parent": "Caching & Performance"
+    },
+    {
+      "title": "Cache_Manager: Staleness Detection & Incremental Updates",
+      "purpose": "Covers WPDI\\Cache_Manager — how it receives its dependencies via constructor (Cache_Store, Auto_Discovery, Class_Inspector, autowiring paths, base path, environment), compares file mtimes to detect stale entries, performs incremental re-parsing of modified files, triggers full rebuilds when scope_file or wpdi-config.php changes, and skips staleness checks in production mode. Documents the get_cache() entry point used by both Scope and WP-CLI commands.",
+      "parent": "Caching & Performance",
+      "page_notes": [
+        {
+          "content": "Cache_Manager receives all its dependencies through its constructor — Scope::__construct() wires them together. Cache_Manager does not create its own Auto_Discovery or Class_Inspector.\n\nWP-CLI commands that use load_module_cache() always pass 'development' as the environment argument to Cache_Manager, never wp_get_environment_type(). This ensures staleness checks always run in CLI context (WordPress defaults to 'production' when WP_ENVIRONMENT_TYPE is unset, which would skip staleness checks and serve stale data). ADR-015 documents this decision."
+        }
+      ]
+    },
+    {
+      "title": "Class_Inspector: Reflection Utilities",
+      "purpose": "Documents WPDI\\Class_Inspector — the centralized reflection utility that provides cached ReflectionClass instances, is_concrete() checks, get_dependencies() constructor parameter extraction, get_type() classification (concrete class, interface, abstract, builtin), and get_metadata() for cache population. Explains how it is shared across Auto_Discovery, Cache_Manager, and WP-CLI commands to avoid redundant reflection.",
+      "parent": "Caching & Performance"
+    },
+    {
+      "title": "WP-CLI Commands",
+      "purpose": "Overview of the wp di command suite — registration via Cli::register_commands() (called at Scope.php load time), available commands (compile, clear, list, inspect, depends), the abstract Command base class, common rendering methods (table(), render_tree(), log_class_header()), output formats (table, ascii, json, yaml, csv), and common development workflows.",
+      "page_notes": [
+        {
+          "content": "All commands extend the abstract Command base class (src/Commands/Command.php). Commands collect data and call parent rendering methods — they do not format output themselves.\n\nThe table() method signature: table($items, $fields, $types, $title, $separators). Column widths use mb_strlen() for multi-byte safety. $types maps field names to format identifiers: 'class_name', 'class_fqcn', 'class_binding', 'type_label', 'via', 'bool', 'param'.\n\nAll commands that use table() or render_tree() must call $this->parse_format_flag($assoc_args) at the start of __invoke() and include [--format=<format>] in @synopsis.\n\nThe load_module_cache($path, $autowiring_paths) helper (on Command) instantiates Cache_Manager and calls get_cache() — the same pipeline as Scope::__construct(). It always passes 'development' as the environment."
+        }
+      ]
+    },
+    {
+      "title": "wp di compile & wp di clear",
+      "purpose": "Reference for the compile and clear commands. compile options: --dir, --autowiring-paths, --force, --format. Compile lifecycle: Auto_Discovery scans each autowiring path → wpdi-config.php is loaded and validated (strings and contextual string-arrays only; closures abort with error) → Cache_Store writes cache/wpdi-container.php. compile is the only command that performs standalone discovery rather than loading from an existing cache. clear removes the cache directory. Includes CI/CD deployment workflows.",
+      "parent": "WP-CLI Commands",
+      "page_notes": [
+        {
+          "content": "Compile_Command uses Auto_Discovery and Cache_Store directly — it does NOT use Cache_Manager. This is intentional: compile is the cache builder, and running it through Cache_Manager would create a circular dependency on the cache it is trying to build.\n\nwpdi-config.php validation in Compile_Command: top-level values must be strings or arrays; array values must be strings; anything else (closure, object, integer, etc.) calls $this->error() which halts execution."
+        }
+      ]
+    },
+    {
+      "title": "wp di list",
+      "purpose": "Reference for the list command: options (--dir, --autowiring-paths, --filter, --format), output columns (class, type, autowirable, source), the cache-first pipeline (load_module_cache → merge config bindings → render), and filtering/formatting behavior.",
+      "parent": "WP-CLI Commands"
+    },
+    {
+      "title": "wp di inspect",
+      "purpose": "Reference for the inspect command: dependency tree rendering with Unicode box-drawing characters (--format=ascii for CI), the recursive collect_tree_rows algorithm, circular dependency detection ([CIRCULAR] label), short-name resolution via cached class names and bindings, depth limiting, and resolution warnings (not resolvable, not instantiable). Covers the log_class_header() preamble and the render_tree() rendering pipeline.",
+      "parent": "WP-CLI Commands"
+    },
+    {
+      "title": "wp di depends",
+      "purpose": "Reference for the depends command: reverse dependency lookup (which classes depend on a given class/interface), config-bound interface tracing with 'via' annotation, short-name vs FQCN input routing, the build_config_mapping_label() resolution hierarchy, and the 'as ConcreteClass' binding column. Covers log_class_header() preamble.",
+      "parent": "WP-CLI Commands"
+    },
+    {
+      "title": "Deployment & WordPress Integration",
+      "purpose": "Overview of deployment strategies and WordPress-specific integration concerns. Links to child pages for version conflict detection and MU-plugin installation."
+    },
+    {
+      "title": "Version Conflict Detection",
+      "purpose": "Explains the version-check.php mechanism: the WPDI_VERSION constant, version_compare() logic that wp_die()s when an older copy of WPDI loads after a newer one, actionable error guidance, the scoping/namespacing approach (PHP-Scoper / Mozart) for plugins distributed on WordPress.org, and the two-place version update requirement (composer.json and src/version-check.php must always match).",
+      "parent": "Deployment & WordPress Integration"
+    },
+    {
+      "title": "MU-Plugin Installation",
+      "purpose": "Covers the global (MU-plugin) deployment model: wpdi-loader.php placement in mu-plugins/, load order guarantees (MU-plugins load before regular plugins), CLI command registration without a Scope subclass, DDEV cache volume configuration, and verification.",
+      "parent": "Deployment & WordPress Integration"
+    },
+    {
+      "title": "Testing",
+      "purpose": "Overview of testing patterns and the test infrastructure for WPDI itself. Links to child pages for plugin testing patterns and the WPDI library's own test suite."
+    },
+    {
+      "title": "Testing Your Plugin with WPDI",
+      "purpose": "Patterns for unit testing constructor-injected services (mock dependencies directly — no container needed), integration testing with a real Container (load_config() overrides, TestScope::clear() in tearDown()), and testing WordPress hooks in isolation.",
+      "parent": "Testing",
+      "page_notes": [
+        {
+          "content": "When showing integration test examples that use a Scope subclass, always call TestScope::clear() in tearDown() to reset the singleton guard. Test fixture Scope subclasses must override the constructor with public visibility and call parent::__construct() — because the constructor is protected in the base class.\n\nUnit tests for constructor-injected services do not need WPDI at all — just instantiate the class directly with mock dependencies. Only integration tests that exercise the full container pipeline need Scope."
+        }
+      ]
+    },
+    {
+      "title": "WPDI Test Suite & WP_CLI Mocks",
+      "purpose": "Documents the WPDI library's own test infrastructure: tests/bootstrap.php setup (ABSPATH constant, WordPress function stubs including wp_mkdir_p, esc_html, wp_json_encode, wp_die → RuntimeException), the WP_CLI mock class (static $calls array, WP_CLI_Exception for ::error()), WP_CLI_Utils mock, temporary directory lifecycle in command tests, and the Fixtures directory (sample classes covering circular deps, nullable params, abstract classes, interfaces).",
+      "parent": "Testing"
+    },
+    {
+      "title": "Troubleshooting",
+      "purpose": "Common errors and their fixes: class not found in container, interface not bound, circular dependency detected, cannot resolve scalar/builtin parameters, stale WordPress options passed to constructors, wpdi-config.php location requirements, non-writable cache directory, contextual binding key mismatches, and closure/object rejected in config. Includes a quick diagnostic checklist."
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of all WPDI-specific terms, abbreviations, and domain concepts: composition root, autowiring, scope, resolver, compiled cache, contextual binding, singleton pattern, PSR-11, Cache_Store, Cache_Manager, Class_Inspector, Auto_Discovery. Includes code pointers to relevant files and classes."
+    }
+  ]
+}
