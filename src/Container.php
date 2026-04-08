@@ -44,11 +44,15 @@ class Container implements ContainerInterface {
 	private array $class_constructors = array();
 
 	/**
-	 * Cached singleton instances.
+	 * Cached singleton instances (shared across all Container instances).
+	 *
+	 * Static so that multiple plugin Scopes on the same request share object
+	 * identity for the same class. First container to resolve a class caches
+	 * it; all subsequent containers reuse the cached instance.
 	 *
 	 * @var array
 	 */
-	private array $instances = array();
+	private static array $instances = array();
 
 	/**
 	 * Classes currently being resolved (circular dependency guard).
@@ -119,9 +123,9 @@ class Container implements ContainerInterface {
 			throw new Not_Found_Exception( "'{$id}' must be a valid class or interface name" );
 		}
 
-		// 1. Singleton cache.
-		if ( isset( $this->instances[ $id ] ) ) {
-			return $this->instances[ $id ];
+		// 1. Singleton cache (static — shared across all Container instances).
+		if ( isset( self::$instances[ $id ] ) ) {
+			return self::$instances[ $id ];
 		}
 
 		// 2. Explicit binding.
@@ -154,7 +158,7 @@ class Container implements ContainerInterface {
 	public function has( string $id ): bool {
 		return isset( $this->bindings[ $id ] ) ||
 			isset( $this->contextual_bindings[ $id ] ) ||
-			isset( $this->instances[ $id ] ) ||
+			isset( self::$instances[ $id ] ) ||
 			class_exists( $id );
 	}
 
@@ -252,7 +256,7 @@ class Container implements ContainerInterface {
 		$instance = $binding['factory']( $this->resolver() );
 
 		if ( $binding['singleton'] ) {
-			$this->instances[ $abstract ] = $instance;
+			self::$instances[ $abstract ] = $instance;
 		}
 
 		return $instance;
@@ -290,7 +294,7 @@ class Container implements ContainerInterface {
 			}
 
 			// Auto-wiring treats every class as a singleton.
-			$this->instances[ $class_name ] = $instance;
+			self::$instances[ $class_name ] = $instance;
 
 			return $instance;
 		} finally {
@@ -374,12 +378,12 @@ class Container implements ContainerInterface {
 
 		$cache_key = $abstract . '::' . $key;
 
-		if ( isset( $this->instances[ $cache_key ] ) ) {
-			return $this->instances[ $cache_key ];
+		if ( isset( self::$instances[ $cache_key ] ) ) {
+			return self::$instances[ $cache_key ];
 		}
 
 		$instance                      = $this->get( $bindings[ $key ] );
-		$this->instances[ $cache_key ] = $instance;
+		self::$instances[ $cache_key ] = $instance;
 
 		return $instance;
 	}
@@ -474,9 +478,20 @@ class Container implements ContainerInterface {
 		$this->bindings            = array();
 		$this->contextual_bindings = array();
 		$this->class_constructors  = array();
-		$this->instances           = array();
+		self::$instances           = array();
 		$this->resolving           = array();
 		$this->resolver            = null;
+	}
+
+	/**
+	 * Clear the shared singleton instance cache.
+	 *
+	 * Since $instances is static (shared across all Container instances),
+	 * this method ensures test teardown fully resets singleton state.
+	 * Called by Scope::clear() during test teardown.
+	 */
+	public static function clear_instances(): void {
+		self::$instances = array();
 	}
 
 	/**

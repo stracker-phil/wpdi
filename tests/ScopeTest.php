@@ -146,15 +146,15 @@ class ScopeTest extends TestCase {
 	 * WHEN each scope resolves the same service
 	 * THEN each scope has its own independent container with separate instances
 	 */
-	public function test_multiple_scopes_have_independent_containers(): void {
+	public function test_multiple_scopes_share_singleton_instances(): void {
 		$scope1 = new TestScope( __FILE__ );
 		$scope2 = new TestScope( __FILE__ );
 
 		$service1 = $scope1->public_get( SimpleClass::class );
 		$service2 = $scope2->public_get( SimpleClass::class );
 
-		// Each scope should have its own container, so instances should differ
-		$this->assertNotSame( $service1, $service2 );
+		// Scopes share a static singleton pool, so the same class yields the same instance.
+		$this->assertSame( $service1, $service2 );
 	}
 
 	/**

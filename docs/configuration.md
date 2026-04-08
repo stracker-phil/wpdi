@@ -54,6 +54,23 @@ class My_Plugin extends WPDI\Scope {
 }
 ```
 
+### Cross-Plugin Paths
+
+Add another plugin's source directory as an absolute path to share its services:
+
+```php
+class My_Plugin extends WPDI\Scope {
+    protected function autowiring_paths(): array {
+        return array(
+            'src',
+            plugin_dir_path( PLUGIN_B_FILE ) . 'src',
+        );
+    }
+}
+```
+
+Absolute paths (starting with `/`) pass through unchanged. Plugin B must be installed and its classes autoloadable. See [Multi-Plugin Patterns](multi-plugin-patterns.md) for the full guide.
+
 ## Manual Bindings (wpdi-config.php)
 
 Use `wpdi-config.php` for interface bindings and external classes.

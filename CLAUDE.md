@@ -45,7 +45,7 @@ adr/                     # Architectural Decision Records
 
 - **Composition root**: `App::boot(__FILE__)` is the entry point — a static method on `Scope` that is idempotent (duplicate calls are no-ops) and returns `void`. The constructor is `protected`; `boot()` is the only external entry point. `bootstrap(Resolver)` is the single place services are resolved. `Scope` also provides overridable `autowiring_paths()` and `environment()` methods. See [ADR-006](adr/006-composition-root-pattern.md).
 - **Zero-config autowiring**: Concrete classes in `src/` are auto-discovered and wired via reflection. Interface bindings go in `wpdi-config.php` as static class name strings (`Interface::class => Concrete::class`). Contextual bindings use `'$param_name'`-keyed arrays; the fallback key is `'default'`. See [ADR-004](adr/004-zero-config-autowiring.md), [ADR-010](adr/010-contextual-bindings.md), [ADR-013](adr/013-static-config-format.md).
-- **Singleton by default**: Services are cached after first resolution. Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md).
+- **Singleton by default**: Services are cached after first resolution in a static pool shared across all Container instances (so multiple plugin Scopes on the same request share object identity). Don't pass `get_option()` to constructors — use method-level calls instead. See [ADR-009](adr/009-singleton-by-default.md), [ADR-018](adr/018-static-singleton-instances.md).
 - **Metadata caching**: Cache stores `{classes: {path, mtime, dependencies, constructor}, bindings: {interface => class}}`. The `constructor` key holds full parameter descriptors (name, type, builtin, nullable, default) so `Container::autowire()` skips reflection at runtime. Both autowired class metadata and `wpdi-config.php` interface bindings are serialized — the compiled file is a complete deployable artifact. Incremental updates in dev; pre-compile for production with `wp di compile`. See [ADR-005](adr/005-metadata-caching.md).
 - **Version conflict detection**: `version-check.php` prevents older WPDI from silently breaking when multiple plugins bundle it. See [ADR-008](adr/008-version-conflict-detection.md).
 - **Exception hierarchy**: `WPDI_Exception` > `Container_Exception` (PSR-11) > `Not_Found_Exception` / `Circular_Dependency_Exception`
@@ -67,7 +67,8 @@ adr/                     # Architectural Decision Records
 **Scope changes:**
 - Constructor is `protected` — use `App::boot(__FILE__)` as the external entry point
 - `boot()` is idempotent: second call for the same class is a no-op (silent return)
-- `clear()` is for test teardown only — call in `tearDown()` via `TestScope::clear()`
+- `clear()` is for test teardown only — call in `tearDown()` via `TestScope::clear()`. It chains to `Container::clear_instances()` to reset the shared static singleton pool.
+- `autowiring_paths()` supports both relative paths (resolved against plugin base directory) and absolute paths (e.g. `plugin_dir_path( PLUGIN_B_FILE ) . 'src'` for cross-plugin autowiring). See [ADR-018](adr/018-static-singleton-instances.md).
 - Test fixtures that need direct instantiation must override the constructor with `public` visibility and call `parent::__construct()`
 - `Scope::__construct()` owns the full bootstrap sequence: creates `Cache_Store`, `Class_Inspector`, `Auto_Discovery`, `Cache_Manager`; loads config; feeds compiled cache to `Container`; then calls `bootstrap(Resolver)`
 
@@ -75,7 +76,8 @@ adr/                     # Architectural Decision Records
 - Container is a pure resolver — it has no `initialize()` method. Bootstrap orchestration lives in `Scope`.
 - Update `ContainerTest.php` with corresponding tests
 - Maintain `$resolving` cleanup in try-finally for circular dependency detection
-- Ensure `clear()` resets all state including `$resolving`, `$resolver`, `$contextual_bindings`, and `$class_constructors`
+- Ensure `clear()` resets all state including `$resolving`, `$resolver`, `$contextual_bindings`, `$class_constructors`, and the static `$instances` pool
+- `$instances` is static (shared across all Container instances). `clear_instances()` is a public static method that resets it. `Scope::clear()` calls it automatically.
 - Test both autowiring and explicit binding paths
 
 **Auto_Discovery changes:**

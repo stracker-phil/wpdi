@@ -190,5 +190,6 @@ Class names must match file names exactly:
 
 - [Application Flow](application-flow.md) - Boot sequence, build vs runtime, composition root
 - [Configuration](configuration.md) - Interface bindings
+- [Multi-Plugin Patterns](multi-plugin-patterns.md) - Cross-plugin service sharing
 - [Testing](testing.md) - Unit testing patterns
 - [Troubleshooting](troubleshooting.md) - Common issues

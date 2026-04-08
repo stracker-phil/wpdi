@@ -97,6 +97,7 @@ wp di compile
 - [WP-CLI Commands](docs/wp-cli.md)
 - [API Reference](docs/api-reference.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Multi-Plugin Patterns](docs/multi-plugin-patterns.md) - Cross-plugin service sharing
 - [MU-Plugin Installation](docs/mu-plugin-installation.md) - For developers working with multiple WPDI plugins
 - [WPDI vs Modularity](docs/wpdi-vs-modularity.md) - Framework comparison
 

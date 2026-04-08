@@ -48,6 +48,8 @@ Calling `My_Plugin::boot( __FILE__ )` runs the following steps:
 
 **7. Container released.** After `bootstrap()` returns, the container is not stored as a reachable property. The booted `Scope` instance is held internally to prevent GC; services hold references only to other services.
 
+**Shared singletons.** The singleton cache is shared across all Container instances on the same request. If multiple plugins use WPDI, a class resolved by Plugin A's container is reused by Plugin B's container — same object, not a duplicate. See [Multi-Plugin Patterns](multi-plugin-patterns.md) for how to leverage this for cross-plugin service sharing.
+
 ## Development vs production
 
 WPDI has two distinct operational phases: build time and boot time.
@@ -109,3 +111,4 @@ The constraints in this design each close a common failure mode:
 | `boot()` idempotent                                | Two plugins bundling WPDI cannot create two containers for the same scope          |
 | `bootstrap()` receives `Resolver`, not `Container` | Even `bootstrap()` cannot mutate the container after it is built                   |
 | Cache is the authoritative definition              | What `compile` builds is exactly what runs — no divergence between CLI and runtime |
+| Static singleton pool                              | Multiple plugins sharing a class get the same object — no silent duplication       |

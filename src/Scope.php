@@ -89,6 +89,7 @@ abstract class Scope {
 	 */
 	public static function clear(): void {
 		unset( self::$booted[ static::class ] );
+		Container::clear_instances();
 	}
 
 	/**
@@ -162,21 +163,30 @@ abstract class Scope {
 	}
 
 	/**
-	 * Normalize relative autowiring paths to absolute paths
+	 * Normalize autowiring paths to absolute paths
+	 *
+	 * Relative paths are resolved against $base_path. Absolute paths (e.g. from
+	 * plugin_dir_path()) pass through unchanged — this supports cross-plugin
+	 * autowiring where Plugin A discovers classes from Plugin B's src/ directory.
 	 *
 	 * @param string $base_path Base directory.
-	 * @param array  $paths     Relative paths.
+	 * @param array  $paths     Relative or absolute paths.
 	 * @return array Absolute paths with trailing slashes removed.
 	 */
 	private function normalize_paths( string $base_path, array $paths ): array {
 		$normalized = array();
 
 		foreach ( $paths as $path ) {
-			// Remove any .. to prevent traversal.
-			$path = str_replace( '..', '', $path );
+			if ( '/' === ( $path[0] ?? '' ) ) {
+				// Absolute path — trust it as-is.
+				$absolute = $path;
+			} else {
+				// Remove any .. to prevent traversal in relative paths.
+				$path = str_replace( '..', '', $path );
 
-			// Convert relative to absolute.
-			$absolute = $base_path . '/' . ltrim( $path, '/' );
+				// Convert relative to absolute.
+				$absolute = $base_path . '/' . ltrim( $path, '/' );
+			}
 
 			// Remove trailing slash.
 			$absolute = rtrim( $absolute, '/' );

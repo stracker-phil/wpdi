@@ -116,6 +116,26 @@ class Hooks_Test extends WP_UnitTestCase {
 }
 ```
 
+## Clearing State Between Tests
+
+WPDI's singleton cache is shared across all Container instances (see [Multi-Plugin Patterns](multi-plugin-patterns.md)). When testing with `Scope`, call `clear()` in `tearDown()` to reset both the booted instance and the shared singleton pool:
+
+```php
+protected function tearDown(): void {
+    parent::tearDown();
+    My_Plugin::clear();  // Clears booted state + shared singleton pool
+}
+```
+
+When testing with `Container` directly, call `clear()` on the container instance:
+
+```php
+protected function tearDown(): void {
+    parent::tearDown();
+    $this->container->clear();  // Clears bindings + shared singleton pool
+}
+```
+
 ## Test Structure
 
 ```

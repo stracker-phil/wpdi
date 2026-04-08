@@ -635,6 +635,21 @@ PHP;
 		$this->assertTrue( $this->container->has( SimpleClass::class ) );
 	}
 
+	/**
+	 * GIVEN two separate Container instances
+	 * WHEN the same class is resolved from both
+	 * THEN both return the same singleton (static instance cache is shared)
+	 */
+	public function test_static_instances_shared_across_containers(): void {
+		$container_a = new Container();
+		$container_b = new Container();
+
+		$from_a = $container_a->get( SimpleClass::class );
+		$from_b = $container_b->get( SimpleClass::class );
+
+		$this->assertSame( $from_a, $from_b );
+	}
+
 	// ========================================
 	// Contextual Binding Tests
 	// ========================================

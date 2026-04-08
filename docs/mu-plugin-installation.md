@@ -215,3 +215,7 @@ No conflicts possible - each plugin has its own namespaced copy.
 
 **Benefit:**
 Simpler than scoping, single WPDI version, easier debugging.
+
+## Cross-Plugin Service Sharing
+
+This document covers version management — ensuring the same WPDI library loads for all plugins. For sharing **services** between plugins (one plugin using another's classes), see [Multi-Plugin Patterns](multi-plugin-patterns.md).
