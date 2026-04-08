@@ -110,6 +110,11 @@ class Class_Inspector {
 					// Non-constant default (e.g. PHP 8.1 `new Foo()`).
 					// Omit constructor cache for this class — fall back to reflection.
 					return null;
+				} catch ( \Error $e ) {
+					// Default references a constant not defined in the current scope
+					// (e.g. `self::SOME_CONST` from an unloaded class).
+					// Omit constructor cache for this class — fall back to reflection.
+					return null;
 				}
 			}
 

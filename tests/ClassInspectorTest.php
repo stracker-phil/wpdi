@@ -13,6 +13,7 @@ use WPDI\Tests\Fixtures\ClassWithNullableParameter;
 use WPDI\Tests\Fixtures\ClassWithOptionalDependency;
 use WPDI\Tests\Fixtures\ClassWithContextualDeps;
 use WPDI\Tests\Fixtures\CacheInterface;
+use WPDI\Tests\Fixtures\ClassWithUndefinedConstantDefault;
 
 class ClassInspectorTest extends TestCase {
 	private Class_Inspector $inspector;
@@ -33,6 +34,7 @@ class ClassInspectorTest extends TestCase {
 		require_once __DIR__ . '/Fixtures/ClassWithOptionalDependency.php';
 		require_once __DIR__ . '/Fixtures/CacheInterface.php';
 		require_once __DIR__ . '/Fixtures/ClassWithContextualDeps.php';
+		require_once __DIR__ . '/Fixtures/ClassWithUndefinedConstantDefault.php';
 	}
 
 	public function test_get_reflection_returns_reflection_class(): void {
@@ -248,6 +250,12 @@ class ClassInspectorTest extends TestCase {
 		$this->assertTrue( $params[0]['nullable'] );
 		$this->assertTrue( $params[0]['has_default'] );
 		$this->assertNull( $params[0]['default'] );
+	}
+
+	public function test_get_constructor_params_returns_null_for_undefined_constant_default(): void {
+		$params = $this->inspector->get_constructor_params( ClassWithUndefinedConstantDefault::class );
+
+		$this->assertNull( $params, 'Should return null when default value references an undefined class constant' );
 	}
 
 	public function test_get_constructor_params_extracts_contextual_deps(): void {
