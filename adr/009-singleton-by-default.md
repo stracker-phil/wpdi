@@ -8,10 +8,10 @@ In WordPress request lifecycle, most services are stateless processors that shou
 
 ## Decision
 
-All resolved services are cached as singletons in the Container's `$instances` array. The factory runs once; subsequent `get()` calls return the cached instance. Non-singleton behavior requires explicit factory override.
+All resolved services are cached as singletons in the Container's `$instances` array. The resolver runs once per class; subsequent `get()` calls return the cached instance. There is no configuration mechanism for per-call (prototype) instances.
 
 ## Consequences
 
 - Performance: each service constructed at most once per request
 - WordPress options/config must not be passed to constructors (cached forever) — use method-level `get_option()` calls instead
-- Stateful services that need fresh instances require custom factory configuration
+- Stateful services that need fresh instances must be instantiated manually and should not be resolved through the container

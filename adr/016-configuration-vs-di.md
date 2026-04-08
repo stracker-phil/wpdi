@@ -36,7 +36,12 @@ class ApiEndpointHandler {
     protected const LIVE_URL = 'https://api-live.com';
     protected const TEST_URL = 'https://api-sandbox.com';
 
-    public function __construct( protected readonly Environment $environment ) {}
+    /** @var Environment */
+    protected $environment;
+
+    public function __construct( Environment $environment ) {
+        $this->environment = $environment;
+    }
 
     public function url(): string {
         return $this->environment->is_live() ? static::LIVE_URL : static::TEST_URL;
@@ -67,7 +72,12 @@ Because `InvoicePrefix` is a concrete class with no constructor parameters, the 
 
 ```php
 class InvoiceService {
-    public function __construct( private InvoicePrefix $prefix ) {}
+    /** @var InvoicePrefix */
+    private $prefix;
+
+    public function __construct( InvoicePrefix $prefix ) {
+        $this->prefix = $prefix;
+    }
 
     public function next_number(): string {
         return $this->prefix->value() . $this->generate_sequence();
@@ -75,12 +85,7 @@ class InvoiceService {
 }
 ```
 
-Extending the wrapper for domain specificity is encouraged when it improves clarity:
-
-```php
-class DatabaseUrl extends StringValue {}
-class StripePublicKey extends StringValue {}
-```
+Each runtime-dynamic value gets its own typed wrapper class. Naming them after the concept (not the data type) keeps consuming code readable and avoids collisions when two services need different string values.
 
 ## Consequences
 

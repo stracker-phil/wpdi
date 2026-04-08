@@ -6,7 +6,9 @@
 
 A single interface binding in `wpdi-config.php` maps one interface to one implementation. When multiple consumers need different implementations of the same interface, there was no solution short of creating wrapper interfaces or manual factory logic.
 
-Symfony solves this with "named autowiring" — matching the constructor parameter name to an implementation automatically. This approach was considered but rejected for WPDI because the implicit naming convention adds magic that is hard to grasp for WordPress developers.
+Symfony solves this with "named autowiring" — binding a constructor parameter name to a service globally, regardless of type hint. This implicit, type-agnostic convention was considered but rejected: any parameter named `$fooService` anywhere in the codebase silently receives a bound service, with no type-level contract and no explicit config entry pointing to it.
+
+WPDI takes the same core idea — param name as a discriminator — but scopes it to a specific interface binding and requires explicit configuration. The type hint remains the primary routing key; the param name is only consulted as a tiebreaker when the interface has multiple implementations.
 
 ## Decision
 

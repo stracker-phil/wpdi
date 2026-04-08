@@ -8,7 +8,7 @@ Most WordPress DI setups require verbose configuration. For concrete classes wit
 
 ## Decision
 
-`Auto_Discovery` scans configurable paths (default `src/`) for concrete classes using PHP tokenization. The `Container` autowires them via `ReflectionClass` — no manual registration needed. Explicit factories in `wpdi-config.php` override autowiring for interface bindings or special construction.
+`Auto_Discovery` scans configurable paths (default `src/`) for concrete classes using PHP tokenization. The `Container` autowires them via `ReflectionClass` — no manual registration needed. Explicit interface bindings in `wpdi-config.php` override autowiring — each interface maps to a concrete class name string (see ADR-013).
 
 ## Consequences
 
