@@ -128,7 +128,7 @@ protected function tearDown(): void {
 
 ### bootstrap(Resolver $resolver): void (abstract)
 
-Composition root - implement in your module. Called automatically by `boot()`.
+Composition root — implement in your module. Called automatically by `boot()`. See [Application Flow](application-flow.md) for the full boot sequence and how to use this effectively.
 
 ---
 

@@ -188,6 +188,7 @@ Class names must match file names exactly:
 
 ## Next Steps
 
+- [Application Flow](application-flow.md) - Boot sequence, build vs runtime, composition root
 - [Configuration](configuration.md) - Interface bindings
 - [Testing](testing.md) - Unit testing patterns
 - [Troubleshooting](troubleshooting.md) - Common issues

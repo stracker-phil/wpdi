@@ -91,6 +91,7 @@ wp di compile
 > **Tip:** Use DeepWiki to explore the codebase using AI - https://deepwiki.com/stracker-phil/wpdi
 
 - [Getting Started](docs/getting-started.md)
+- [Application Flow](docs/application-flow.md)
 - [Configuration](docs/configuration.md)
 - [Testing](docs/testing.md)
 - [WP-CLI Commands](docs/wp-cli.md)
