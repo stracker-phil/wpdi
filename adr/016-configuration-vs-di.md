@@ -6,7 +6,7 @@
 
 As projects grow, there is recurring pressure to pass configuration values — environment URLs, feature flags, scalar settings — through the DI container. Two approaches were considered and rejected:
 
-**Scalar bindings in `wpdi-config.php`** (e.g. `InvoicePrefix::class => 'INV-2025-'`): looks convenient but has no natural boundary. Once scalar values are a first-class citizen of the config file, it becomes the path of least resistance for any hardcoded value, making the config file a mixed bag of type bindings and data.
+**Scalar bindings in `wpdi-config.php`** (e.g. `InvoicePrefix::class => 'INV-2025-'`): looks convenient but has no natural boundary. Once scalar values enter the config file it becomes the path of least resistance for any hardcoded value, making the config file a mixed bag of type bindings and data. The deeper architectural reasons why primitives cannot flow through DI are documented in ADR-017.
 
 **Callable/factory support in `wpdi-config.php`**: already rejected in ADR-013 for serializability reasons. The deeper problem surfaced by real-world usage is that factory closures attract business logic. A factory that was intended to "just return a value" drifts into calling `apply_filters`, reading settings objects from the container, and encoding eligibility rules:
 
@@ -92,5 +92,5 @@ Each runtime-dynamic value gets its own typed wrapper class. Naming them after t
 - `wpdi-config.php` remains a pure, static, inspectable map of interface → concrete class names. No values, no callables.
 - Business logic cannot be smuggled into DI factories because no factory mechanism exists in the config layer.
 - Services own their internal configuration. Static values (URLs, limits, prefixes that never change at runtime) are constants — not constructor parameters, not bindings.
-- The only values flowing through DI are **behaviors** (interface implementations) and **runtime-dynamic values** wrapped in typed classes. Scalar primitives do not flow through DI directly.
+- The only values flowing through DI are **behaviors** (interface implementations) and **runtime-dynamic values** wrapped in typed classes. Scalar primitives do not flow through DI directly — see ADR-017 for why primitive injection is rejected at the architectural level.
 - Testability of static values is achieved by subclassing and constant overrides, not by making constants into injected parameters.
