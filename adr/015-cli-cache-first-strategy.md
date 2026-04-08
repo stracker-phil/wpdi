@@ -39,7 +39,7 @@ This means the CLI commands get the same behavior as runtime:
 
 **`Inspect_Command` and `Depends_Command`:** call `load_module_cache()` at the start. Tree building and dependent scanning read from cached data. Reflection is only used for classes outside the module's autowiring paths.
 
-**`Compile_Command`:** unchanged — it's the authoritative cache builder that always does fresh discovery.
+**`Compile_Command`:** always does fresh standalone discovery (does not use `Cache_Manager`). It has no `--force` flag — full regeneration is unconditional. See the amendment below.
 
 ## Consequences
 
@@ -47,3 +47,15 @@ This means the CLI commands get the same behavior as runtime:
 - Cache format changes, staleness fixes, or new rebuild triggers in `Cache_Manager` automatically apply to CLI commands.
 - First CLI run on a project without a cache triggers a full rebuild (same as the first HTTP request); subsequent runs are near-instant when files haven't changed.
 - The `compile` command remains the explicit "build for production" step; the other commands create/update the cache implicitly as a side effect of `Cache_Manager`.
+
+## Amendment: compile always regenerates; --force removed
+
+**Status:** Amended
+
+`Compile_Command` previously accepted a `--force` flag to overwrite an existing cache, and would otherwise warn and exit early. This was removed because the flag was always necessary in practice and was misleading:
+
+When any WP-CLI command runs, `Scope` bootstraps the container — which runs `Cache_Manager::get_cache()`, which writes (or updates) the cache file. By the time `Compile_Command.__invoke()` executes, the cache already exists because the bootstrap already created it. A guard that exits when the cache exists would cause `wp di compile` (without `--force`) to always warn and exit, making the flag mandatory but non-obvious.
+
+The root cause is that `Scope` bootstrap and `compile` both write to the same file. The correct fix is to make `compile` unconditionally overwrite — its purpose is to do a full, clean rebuild for production, and that semantics should not require a flag.
+
+`--force` is removed from the synopsis, docs, and implementation. `compile` now always regenerates the full cache.

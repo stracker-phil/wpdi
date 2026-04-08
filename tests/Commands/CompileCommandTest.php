@@ -95,10 +95,10 @@ class CompileCommandTest extends TestCase {
 
 	/**
 	 * GIVEN a cache file already exists
-	 * WHEN compiling without force flag
-	 * THEN should show warning and not overwrite
+	 * WHEN compiling
+	 * THEN cache should always be recompiled
 	 */
-	public function test_shows_warning_when_cache_exists_without_force(): void {
+	public function test_always_recompiles_when_cache_exists(): void {
 		// Create test class and initial cache
 		$this->createTestClass( 'Test_Service' );
 		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
@@ -114,40 +114,7 @@ class CompileCommandTest extends TestCase {
 			array( 'dir' => $this->temp_dir )
 		);
 
-		// Verify cache was not modified
-		$this->assertEquals( $original_mtime, filemtime( $cache_file ) );
-
-		// Verify warning was shown
-		$warning_calls = $this->getWpCliCalls( 'warning' );
-		$this->assertCount( 1, $warning_calls );
-		$this->assertStringContainsString( 'already exists', $warning_calls[0]['args'][0] );
-	}
-
-	/**
-	 * GIVEN a cache file already exists
-	 * WHEN compiling with force flag
-	 * THEN cache should be recompiled
-	 */
-	public function test_recompiles_cache_when_force_flag_set(): void {
-		// Create test class and initial cache
-		$this->createTestClass( 'Test_Service' );
-		$cache_file = $this->temp_dir . '/cache/wpdi-container.php';
-		mkdir( dirname( $cache_file ), 0777, true );
-		file_put_contents( $cache_file, '<?php return array();' );
-
-		$original_mtime = filemtime( $cache_file );
-		sleep( 1 ); // Ensure time difference
-
-		$command = new Compile_Command();
-		$command->__invoke(
-			array(),
-			array(
-				'dir'  => $this->temp_dir,
-				'force' => true,
-			)
-		);
-
-		// Verify cache was modified
+		// Verify cache was overwritten
 		$this->assertGreaterThan( $original_mtime, filemtime( $cache_file ) );
 
 		// Verify success message, no warning

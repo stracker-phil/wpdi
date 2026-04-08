@@ -18,7 +18,7 @@ class Compile_Command extends Command {
 	 * Compile WPDI container cache
 	 *
 	 * @subcommand compile
-	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--force] [--format=<format>]
+	 * @synopsis [--dir=<dir>] [--autowiring-paths=<paths>] [--format=<format>]
 	 *
 	 * ## OPTIONS
 	 *
@@ -28,21 +28,17 @@ class Compile_Command extends Command {
 	 * [--autowiring-paths=<paths>]
 	 * : Comma-separated autowiring paths relative to module (default: src)
 	 *
-	 * [--force]
-	 * : Force recompilation even if cache exists
-	 *
 	 * [--format=<format>]
 	 * : Output format: table (default), ascii, json, yaml, csv
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp di compile
-	 *     wp di compile --dir=/path/to/module --force
+	 *     wp di compile --dir=/path/to/module
 	 *     wp di compile --autowiring-paths=src,modules/auth/src
 	 */
 	public function __invoke( $args, $assoc_args ) {
 		$path             = $assoc_args['dir'] ?? getcwd();
-		$force            = isset( $assoc_args['force'] );
 		$autowiring_paths = $this->parse_autowiring_paths( $assoc_args );
 		$this->parse_format_flag( $assoc_args );
 
@@ -55,12 +51,6 @@ class Compile_Command extends Command {
 		// Check cache directory is writable before doing any work.
 		if ( ! $store->ensure_dir() ) {
 			$this->error( "Cache directory is not writable: {$path}/cache\nEnsure the directory exists and has write permissions." );
-		}
-
-		if ( $store->exists() && ! $force ) {
-			$this->warning( 'Cache file already exists. Use --force to overwrite.' );
-
-			return;
 		}
 
 		$discovery      = new Auto_Discovery();

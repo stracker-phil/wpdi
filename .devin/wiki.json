@@ -122,7 +122,7 @@
     },
     {
       "title": "wp di compile & wp di clear",
-      "purpose": "Reference for the compile and clear commands. compile options: --dir, --autowiring-paths, --force, --format. Compile lifecycle: Auto_Discovery scans each autowiring path → wpdi-config.php is loaded and validated (strings and contextual string-arrays only; closures abort with error) → Cache_Store writes cache/wpdi-container.php. compile is the only command that performs standalone discovery rather than loading from an existing cache. clear removes the cache directory. Includes CI/CD deployment workflows.",
+      "purpose": "Reference for the compile and clear commands. compile options: --dir, --autowiring-paths, --format. Compile lifecycle: Auto_Discovery scans each autowiring path → wpdi-config.php is loaded and validated (strings and contextual string-arrays only; closures abort with error) → Cache_Store writes cache/wpdi-container.php. compile always regenerates the full cache regardless of whether one already exists — the container bootstraps from cache on every WP-CLI invocation, so an existing cache is stale by the time the command runs. compile is the only command that performs standalone discovery rather than loading from an existing cache. clear removes the cache directory. Includes CI/CD deployment workflows.",
       "parent": "WP-CLI Commands",
       "page_notes": [
         {

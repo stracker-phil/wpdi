@@ -66,14 +66,16 @@ Compile container cache for production.
 **Synopsis:**
 
 ```bash
-wp di compile [--dir=<dir>] [--autowiring-paths=<paths>] [--force]
+wp di compile [--dir=<dir>] [--autowiring-paths=<paths>] [--format=<format>]
 ```
 
 **Options:**
 
 - `--dir=<dir>` - Module directory (default: current directory)
 - `--autowiring-paths=<paths>` - Comma-separated autowiring paths relative to module (default: src)
-- `--force` - Overwrite existing cache file
+- `--format=<format>` - Output format (default: table): `table`, `ascii`, `json`, `yaml`, `csv`
+
+`compile` always regenerates the full cache, even if one already exists. This is intentional: the container bootstraps from the cache on every WP-CLI invocation, so an existing cache is already stale by the time the command runs.
 
 **Example:**
 
@@ -223,7 +225,7 @@ When using custom autowiring paths, specify them with `--autowiring-paths`:
 wp di list --autowiring-paths=modules/auth/src,modules/payment/src,shared/src
 
 # Compile with custom paths
-wp di compile --autowiring-paths=modules/auth/src,modules/payment/src --force
+wp di compile --autowiring-paths=modules/auth/src,modules/payment/src
 ```
 
 ## Workflows
@@ -245,7 +247,7 @@ wp di list --autowiring-paths=lib
 
 ```bash
 # Compile for production
-wp di compile --force
+wp di compile
 
 # Verify cache exists
 ls -la cache/wpdi-container.php
@@ -276,7 +278,7 @@ wp di list
 
 ```yaml
 - name: Compile Container
-  run: wp di compile --force
+  run: wp di compile
 
 - name: Verify Cache
   run: test -f cache/wpdi-container.php || exit 1
@@ -285,6 +287,6 @@ wp di list
 ### Plugin Packaging
 
 ```bash
-wp di compile --force
+wp di compile
 zip -r my-plugin.zip . -x "*.git*" "node_modules/*" "tests/*"
 ```
