@@ -10,6 +10,12 @@ WPDI resolves dependencies by type. When a constructor declares `Cache_Interface
 
 Primitive injection is not supported. The container resolves only typed class and interface dependencies. Primitives and other built-in PHP types must not flow through the DI layer directly.
 
+**Boundary:**
+
+This restriction applies to **service classes**. Simple data objects (like DTOs) can, and usually should, receive primitive values in the constructor.
+
+However, those data objects cannot be auto-generated and not used as service dependency directly; a factory or other data-provider service is needed.
+
 ## Consequences
 
 This decision follows from five compounding problems with primitive injection:
@@ -22,11 +28,11 @@ This decision follows from five compounding problems with primitive injection:
 
 **Autowiring primitives is fundamentally ambiguous.** The container cannot infer which `string` value a parameter named `$url` should receive. Every primitive binding requires explicit registration — the zero-config property is gone, and the config file grows unbounded.
 
-**It opens the architecture to anti-patterns.** Once primitives are injectable, the config file becomes a general-purpose value store. Business logic, feature flags, and computed values follow. ADR-016 documents real-world evidence of this drift in a codebase that allowed factory closures.
+**It opens the architecture to anti-patterns.** Once primitives are injectable, the config file becomes a general-purpose value store. As primitives are usually resolved in a condition, we possibly need to re-introduce callbacks into the config file or implement a different way to return conditional values. Business logic, feature flags, and computed values follow. ADR-016 documents real-world evidence of this drift in a codebase that allows factory closures.
 
 ### Practical implications
 
 - Built-in types (`string`, `int`, `bool`, `array`, `callable`) in constructor signatures are unresolvable by the container. `Class_Inspector` marks them `builtin: true`; the `inspect` command renders them as red `builtin` leaf nodes to flag non-autowirable parameters.
-- Runtime-dynamic values (WordPress options, API keys, database URLs) are wrapped in a typed class with a `value()` method and resolved by type. See ADR-016.
+- Runtime-dynamic values (WordPress options, API keys, database URLs) should be wrapped in a typed class with a getter-method and resolved by class-name. See ADR-016.
 - Static (compile-time) values are expressed as class constants, not constructor parameters. See ADR-016.
-- `wpdi-config.php` maps only interface names to concrete class names. No scalar values, no string identifiers. See ADR-013.
+- `wpdi-config.php` maps only interface and class names to concrete class names. No scalar values, no string identifiers. See ADR-013.
